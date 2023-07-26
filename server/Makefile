@@ -12,4 +12,4 @@ $(TARGET): $(SOURCE_FILES)
 	$(CC) $(FLAGS) $^ -o $@
 
 clean:
-	rm -f $(TARGET) $(OBJECT_FILES)
+	rm -f $(TARGET)

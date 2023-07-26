@@ -1,7 +1,4 @@
-#include "deps/Definitions.h"
-
-#include "util.h"
-#include "settings.h"
+#include "constants.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +7,21 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+
+// utility ------------------------------------------------------------------------------
+void set(const struct cob_id *id, void *port, uint16_t node_id, void *p, size_t n);
+void get(void *buf, size_t n, void *port, uint16_t node_id, const struct cob_id *id);
+void die(uint32_t err, const char *what, ...);
+
+void driver_info_dump(void);
+void node_info_dump(void *port, uint16_t node_id);
+void str_motor_type(char *buf, size_t n, uint16_t motor_type);
+
+void str_unit_dim(char *buf, size_t n, uint8_t dimension);
+void str_unit_not(char *buf, size_t n, uint8_t notation);
+void str_unit(char *buf, size_t n, uint32_t unit);
+
+// communications ------------------------------------------------------------------------
 
 // Open a communication port to CAN bus.
 void *port_open(void);

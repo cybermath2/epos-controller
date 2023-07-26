@@ -543,4 +543,3 @@ const uint16_t EG_DLPC_MAIN_LOOP_FILTER_COEFFICIENT_D                 = 123;
 const uint16_t EG_DLPC_MAIN_LOOP_FILTER_COEFFICIENT_E                 = 124;
 
 #endif //_H_LINUX_EPOSCMD_
-

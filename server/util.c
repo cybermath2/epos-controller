@@ -1,7 +1,7 @@
 #include "util.h"
 
-#include "settings.h"
-#include "deps/Definitions.h"
+#include "constants.h"
+#include "deps/definitions.h"
 
 #include <stdio.h>
 #include <string.h>

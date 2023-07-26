@@ -2,7 +2,8 @@
 
 #include <stdint.h>
 #include <netinet/in.h>
-#include "deps/Definitions.h"
+
+#include "deps/definitions.h"
 
 struct cob_id {
         uint16_t id;
@@ -27,13 +28,13 @@ const uint16_t NODE_ID 	= 2;
 
 // motor settings
 const uint16_t MOTOR_TYPE = MT_EC_SINUS_COMMUTATED_MOTOR; // motor-specific
-const uint32_t NOMINAL_CURRENT; // motor-specific
-const uint32_t OUTPUT_CURRENT_LIMIT; // user-specific
-const uint8_t  NUMBER_OF_POLE_PAIRS; // motor-specific
-const uint16_t THERMAL_TIME_CONSTANT; // motor-specific
-const uint32_t TORQUE_CONSTANT; // motor-specific
-const uint32_t MAX_MOTOR_SPEED; // user-specific
-const uint32_t MAX_GEAR_INPUT_SPEED; // user-specific
+const uint32_t NOMINAL_CURRENT = 0; // motor-specific
+const uint32_t OUTPUT_CURRENT_LIMIT = 0; // user-specific
+const uint8_t  NUMBER_OF_POLE_PAIRS = 0; // motor-specific
+const uint16_t THERMAL_TIME_CONSTANT = 0; // motor-specific
+const uint32_t TORQUE_CONSTANT = 0; // motor-specific
+const uint32_t MAX_MOTOR_SPEED = 0; // user-specific
+const uint32_t MAX_GEAR_INPUT_SPEED = 0; // user-specific
 
 // position sensor settings
 // application settings

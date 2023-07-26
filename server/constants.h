@@ -24,7 +24,9 @@ const uint32_t BAUDRATE = 250000; // 250 kbit/s
 const uint32_t TIMEOUT  = 500; // 500 ms
 
 // node settings
-const uint16_t NODE_ID 	= 2;
+const uint16_t NODE_ID_YAW 	= 3;
+const uint16_t NODE_ID_PITCH 	= -1;
+const uint16_t NODE_ID_ROLL 	= -1;
 
 // motor settings
 const uint16_t MOTOR_TYPE = MT_EC_SINUS_COMMUTATED_MOTOR; // motor-specific

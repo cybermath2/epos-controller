@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -21,6 +22,9 @@ void str_unit_dim(char *buf, size_t n, uint8_t dimension);
 void str_unit_not(char *buf, size_t n, uint8_t notation);
 void str_unit(char *buf, size_t n, uint32_t unit);
 
+void print_velocity(void *port, uint16_t node_id);
+void print_position(void *port, uint16_t node_id);
+
 // communications ------------------------------------------------------------------------
 void *port_open(void);
 void port_close(void *port);
@@ -32,8 +36,9 @@ void node_configure(void *port, uint16_t node_id);
 void comm_start(void);
 void comm_loop_enter(int server_fd, int client_fd);
 
-// motion
-void node_test_1rpm(void *port, uint16_t node_id);
+// motion -------------------------------------------------------------------------------
+void node_test_position_relative(void *port, uint16_t node_id);
+void node_test_velocity(void *port, uint16_t node_id);
 
 int main(int argc, char *argv[])
 {
@@ -42,12 +47,20 @@ int main(int argc, char *argv[])
         void *port = port_open();
         port_configure(port);
 
-        node_reset(port, 0);
-        node_info_dump(port, 0);
+        node_reset(port, NODE_ID_YAW);
+        node_info_dump(port, NODE_ID_YAW);
+
+       	node_test_position_relative(port, NODE_ID_YAW);
+	//node_test_velocity(port, NODE_ID_YAW);
+
+	int err;
+	if (!VCS_SetDisableState(port, NODE_ID_YAW, &err)) {
+		die(err, "failed to set disable state");
+	}
+
         // not needed since all parameters are stored in non-volatile memory
         // node_configure(port, node_id);
 
-        /* node_test_1rpm(port, node_id); */
         /* comm_start(); */
 
         port_close(port);
@@ -274,6 +287,28 @@ void str_unit(char *buf, size_t n, uint32_t unit)
         snprintf(buf, n, "(%s%s)/%s", buf_prefix, buf_num, buf_denom);
 }
 
+void print_velocity(void *port, uint16_t node_id)
+{
+	int32_t velocity;
+	int32_t err;
+	if (!VCS_GetVelocityIs(port, node_id, &velocity, &err)) {
+		die(err, "failed to get velocity is");
+	}
+
+	printf("current velocity: %d\n", velocity);
+}
+
+void print_position(void *port, uint16_t node_id)
+{
+	int32_t position;
+	int32_t err;
+	if (!VCS_GetPositionIs(port, node_id, &position, &err)) {
+		die(err, "failed to get position is");
+	}
+
+	printf("current position: %d\n", position);
+}
+
 void *port_open(void)
 {
         printf("opening port '%s' using protocol '%s' on interface '%s' and"
@@ -313,10 +348,34 @@ void port_configure(void *port)
 void node_reset(void *port, uint16_t node_id)
 {
         printf("resetting node %u...\n", node_id);
+
         uint32_t err;
-        if (!VCS_SendNMTService(port, node_id, NCS_RESET_NODE, &err)) {
-                die(err, "failed to reset node");
-        }
+	int32_t is_fault;
+	if (!VCS_GetFaultState(port, node_id, &is_fault, &err)) {
+		die(err, "failed to get fault state");
+	}
+
+	if (is_fault) {
+		// clear fault
+		printf("|-> fault state detected - clearing...\n");
+		if (!VCS_ClearFault(port, node_id, &err)) {
+			die(err, "failed to get fault state");
+		}
+	}
+
+	int32_t is_enabled;
+	if (!VCS_GetEnableState(port, node_id, &is_enabled, &err)) {
+		die(err, "failed to get enable state");
+	}
+
+	if (!is_enabled) {
+		// enable device
+		printf("|-> device not enabled - enabling now...\n");
+		if (!VCS_SetEnableState(port, node_id, &err)) {
+			die(err, "failed to set enable state");
+		}
+
+	}
 }
 
 void node_configure(void *port, uint16_t node_id)
@@ -440,4 +499,56 @@ void comm_start(void)
                 printf("accepted new connection with client_fd=%d\n", client_fd);
                 comm_loop_enter(server_fd, client_fd);
         }
+}
+
+// motion -------------------------------------------------------------------------------
+void node_test_position_relative(void *port, uint16_t node_id)
+{
+	int32_t err;
+	if (!VCS_ActivateProfilePositionMode(port, node_id, &err)) {
+		die(err, "failed to activate profile position mode");
+	}
+
+	if (!VCS_SetPositionProfile(port, node_id, 60, 1000, 1000, &err)) {
+		die(err, "failed to set position profile");
+	}
+
+	if (!VCS_MoveToPosition(port, node_id, 10000, 0, 1, &err)) {
+		die(err, "failed to move to position");
+	}
+
+	if (!VCS_WaitForTargetReached(port, node_id, 20000, &err)) {
+		die(err, "failed to wait for target reached");
+	}
+}
+
+void node_test_velocity(void *port, uint16_t node_id)
+{
+	int32_t err;
+	if (!VCS_ActivateProfileVelocityMode(port, node_id, &err)) {
+		die(err, "failed to activate profile velocity mode");
+	}
+
+	if (!VCS_SetVelocityProfile(port, node_id, 1000, 1000, &err)) {
+		die(err, "failed to set velocity profile");
+	}
+
+	if (!VCS_MoveWithVelocity(port, node_id, -100, &err)) {
+		die(err, "failed to move with velocity");
+	}
+
+	struct timespec ts = {
+		.tv_sec = 0,
+		.tv_nsec = 100000000
+	};
+
+	for (int i = 0; i < 50; i++) {
+		print_velocity(port, node_id);
+		nanosleep(&ts, NULL);
+	}
+
+
+	if (!VCS_HaltVelocityMovement(port, node_id, &err)) {
+		die(err, "failed to halt velocity movement");
+	}
 }

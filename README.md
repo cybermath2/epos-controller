@@ -36,8 +36,22 @@ implements the network layer and above layers. CAN support for the Raspberry Pi
 is achieved through a CAN head with two 3-pin connections (H,L,G) sitting on
 top of it and kernel drivers exposing a CAN0 and CAN1 interface. This project
 uses a baud rate of 250kbit/s and a timeout of 500ms, so every interface and
-software port should be configured accordingly. A script to set up an interface
-can be found in scripts/.
+software port should be configured accordingly. CAN0 is connected to CANOpen
+which is used for motion control and CAN1 to CANAerospace which is used for
+instruments and control input. The driver used is `CAN_mcp251x 0`. A script to
+set up an interface can be found in scripts/.
+
+Attention shold be given to proper wiring and a correct termination resistance
+of 120 Ohms at the end of the bus. This can be realized by toggling DIP switch
+7 to the ON position. Wiring errors usually manifest themselves in BUS-OFF
+errors and a NO-CARRIER state on the interface. Interface state can be queried
+using `ip -details link`.
+
+Useful tools for debugging a CAN bus can be found in
+[linux-can/can-utils](https://github.com/linux-can/can-utils) and include
+`candump` for dumping CAN packages (useful to check whether a bus is dead as
+devices shold be configured to send a periodic heartbeat message), `cangen` for
+generation random traffic and `cansend` for sending a single CAN frame.
 
 ### EPOS4
 

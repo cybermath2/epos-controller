@@ -10,7 +10,7 @@ struct cob_id {
         uint8_t sid;
 };
 
-#define NET_BUF_SIZE 8
+#define NET_BUF_SIZE 64
 #define MAX_STR_SIZE 64
 
 // port settings

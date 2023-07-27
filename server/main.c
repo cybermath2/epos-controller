@@ -1,10 +1,12 @@
 #include "constants.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
+#include <string.h>
+#include <stdbool.h>
 #include <time.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -33,37 +35,40 @@ void node_reset(void *port, uint16_t node_id);
 void node_configure(void *port, uint16_t node_id);
 
 // command processing -------------------------------------------------------------------
-void comm_start(void);
-void comm_loop_enter(int server_fd, int client_fd);
+void comm_start(void *port);
+void comm_loop_enter(void *port, int server_fd, int client_fd);
+void command_process(void *port, const char *cmd);
 
 // motion -------------------------------------------------------------------------------
+void move_to_initial_position(void *port);
 void node_test_position_relative(void *port, uint16_t node_id);
 void node_test_velocity(void *port, uint16_t node_id);
 
 int main(int argc, char *argv[])
 {
-        driver_info_dump();
+        /* driver_info_dump(); */
 
-        void *port = port_open();
-        port_configure(port);
+        /* void *port = port_open(); */
+        void *port = NULL;
+        /* port_configure(port); */
 
-        node_reset(port, NODE_ID_YAW);
-        node_info_dump(port, NODE_ID_YAW);
+        /* node_reset(port, NODE_ID_YAW); */
+        /* node_info_dump(port, NODE_ID_YAW); */
 
-       	node_test_position_relative(port, NODE_ID_YAW);
+       	/* node_test_position_relative(port, NODE_ID_YAW); */
 	//node_test_velocity(port, NODE_ID_YAW);
 
-	int err;
-	if (!VCS_SetDisableState(port, NODE_ID_YAW, &err)) {
-		die(err, "failed to set disable state");
-	}
+	/* int err; */
+	/* if (!VCS_SetDisableState(port, NODE_ID_YAW, &err)) { */
+	/* 	die(err, "failed to set disable state"); */
+	/* } */
 
         // not needed since all parameters are stored in non-volatile memory
         // node_configure(port, node_id);
 
-        /* comm_start(); */
+        comm_start(port);
 
-        port_close(port);
+        /* port_close(port); */
         return 0;
 }
 
@@ -92,7 +97,7 @@ void die(uint32_t err, const char *what, ...)
 {
         va_list args;
         va_start(args, what);
-        fprintf(stderr, "|-> ");
+        fprintf(stderr, "");
         vfprintf(stderr, what, args);
         fprintf(stderr, "(err code 0x%x)\n", err);
         va_end(args);
@@ -153,7 +158,7 @@ void node_info_dump(void *port, uint16_t node_id)
                 die(err, "failed to get motor type");
         }
 
-        printf("|-> motor type=%d\n", motor_type);
+        printf("motor type=%d\n", motor_type);
         uint32_t nominal_current;
         uint32_t output_current_limit;
         uint16_t thermal_time_constant;
@@ -163,14 +168,14 @@ void node_info_dump(void *port, uint16_t node_id)
                 die(err, "failed to get motor parameters");
         }
 
-        printf("|-> nominal current=%d, output current limit=%d, thermal time constant winding=%d\n",
+        printf("nominal current=%d, output current limit=%d, thermal time constant winding=%d\n",
                nominal_current, output_current_limit, thermal_time_constant);
 
         if (motor_type == MT_EC_BLOCK_COMMUTATED_MOTOR || motor_type == MT_EC_SINUS_COMMUTATED_MOTOR) {
                 uint8_t number_of_pole_pairs;
                 get(&number_of_pole_pairs, sizeof(number_of_pole_pairs), port,
                     node_id, &COB_ID_NUMBER_OF_POLE_PAIRS);
-                printf("|-> number of pole pairs=%d\n", number_of_pole_pairs);
+                printf("number of pole pairs=%d\n", number_of_pole_pairs);
         }
 
         uint32_t torque_constant;
@@ -180,7 +185,7 @@ void node_info_dump(void *port, uint16_t node_id)
         get(&max_motor_speed, sizeof(max_motor_speed), port, node_id, &COB_ID_MAX_MOTOR_SPEED);
         get(&max_gear_input_speed, sizeof(max_gear_input_speed), port, node_id, &COB_ID_MAX_GEAR_INPUT_SPEED);
 
-        printf("|-> torque constant=%d, max motor speed=%d, max gear input speed=%d\n",
+        printf("torque constant=%d, max motor speed=%d, max gear input speed=%d\n",
                torque_constant, max_motor_speed, max_gear_input_speed);
 }
 
@@ -320,7 +325,7 @@ void *port_open(void)
                 die(err, "failed to open port");
         }
 
-        printf("|-> port opened: handle=0x%p\n", port);
+        printf("port opened: handle=0x%p\n", port);
         return port;
 }
 
@@ -357,7 +362,7 @@ void node_reset(void *port, uint16_t node_id)
 
 	if (is_fault) {
 		// clear fault
-		printf("|-> fault state detected - clearing...\n");
+		printf("fault state detected - clearing...\n");
 		if (!VCS_ClearFault(port, node_id, &err)) {
 			die(err, "failed to get fault state");
 		}
@@ -370,7 +375,7 @@ void node_reset(void *port, uint16_t node_id)
 
 	if (!is_enabled) {
 		// enable device
-		printf("|-> device not enabled - enabling now...\n");
+		printf("device not enabled - enabling now...\n");
 		if (!VCS_SetEnableState(port, node_id, &err)) {
 			die(err, "failed to set enable state");
 		}
@@ -382,7 +387,7 @@ void node_configure(void *port, uint16_t node_id)
 {
         printf("configuring node %u...\n", node_id);
 
-        printf("|-> configuring motor parameters...\n");
+        printf("configuring motor parameters...\n");
 
         uint32_t err;
         uint32_t bytes_written;
@@ -396,7 +401,7 @@ void node_configure(void *port, uint16_t node_id)
         set(&COB_ID_MAX_MOTOR_SPEED, port, node_id, &MAX_MOTOR_SPEED, sizeof(MAX_MOTOR_SPEED));
         set(&COB_ID_MAX_GEAR_INPUT_SPEED, port, node_id, &MAX_GEAR_INPUT_SPEED, sizeof(MAX_GEAR_INPUT_SPEED));
 
-        printf("|-> configured motor with MOTOR_TYPE=%d, NOMINAL_CURRENT=%d, "
+        printf("configured motor with MOTOR_TYPE=%d, NOMINAL_CURRENT=%d, "
                "OUTPUT_CURRENT_LIMIT=%d, THERMAL_TIME_CONSTANT_WINDING=%d, "
                "NUMBER_OF_POLE_PAIRS=%d, MAX_MOTOR_SPEED=%d, "
                "MAX_GEAR_INPUT_SPEED=%d\n", MOTOR_TYPE, NOMINAL_CURRENT,
@@ -406,7 +411,7 @@ void node_configure(void *port, uint16_t node_id)
         if (MOTOR_TYPE == MT_EC_BLOCK_COMMUTATED_MOTOR || MOTOR_TYPE == MT_EC_SINUS_COMMUTATED_MOTOR) {
                 // brushless DC (EC) motor for which the number of pole pairs
                 // needs to be configured as well
-                printf("|-> using brushless DC motor - setting "
+                printf("using brushless DC motor - setting "
                        "NUMBER_OF_POLE_PAIRS=%d...\n", NUMBER_OF_POLE_PAIRS);
                 set(&COB_ID_NUMBER_OF_POLE_PAIRS, port, node_id,
                     &NUMBER_OF_POLE_PAIRS, sizeof(NUMBER_OF_POLE_PAIRS));
@@ -423,41 +428,8 @@ void node_configure(void *port, uint16_t node_id)
         printf("%u\n", data);
 }
 
-void node_test_1rpm(void *port, uint16_t node_id)
-{
-        uint32_t err;
-        if (!VCS_ActivateVelocityMode(port, node_id, &err)) {
-                die(err, "failed to set operational mode to PVM");
-        }
-
-        // 10'000rpm/s
-        if (!VCS_SetVelocityProfile(port, node_id, 1, 1, &err)) {
-                die(err, "failed to set velocity profile");
-        }
-
-        // move with 1rpm
-        if (!VCS_MoveWithVelocity(port, node_id, 1, &err)) {
-                die(err, "failed to move with target velocity");
-        }
-}
-
-void comm_loop_enter(int server_fd, int client_fd)
-{
-        uint8_t buf[NET_BUF_SIZE];
-        ssize_t nread = 1;
-        while (nread != 0 && nread != -1) {
-                nread = read(client_fd, buf, sizeof(buf));
-                printf("received %ld bytes: [", nread);
-                for (size_t i = 0; i < nread; i++) {
-                        if (i > 0)
-                                printf(", ");
-                        printf("0x%x", buf[i]);
-                }
-                printf("]\n");
-        }
-}
-
-void comm_start(void)
+// command processing -------------------------------------------------------------------
+void comm_start(void *port)
 {
         printf("entering communication loop...\n");
 
@@ -466,7 +438,7 @@ void comm_start(void)
                 die(0, "failed to instantiate sockfd");
         }
 
-        printf("|-> created socket with sockfd=%d\n", server_fd);
+        printf("created socket with sockfd=%d\n", server_fd);
 
         const int enable = 1;
         if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(enable)) == -1) {
@@ -497,11 +469,71 @@ void comm_start(void)
                 }
 
                 printf("accepted new connection with client_fd=%d\n", client_fd);
-                comm_loop_enter(server_fd, client_fd);
+                comm_loop_enter(port, server_fd, client_fd);
+        }
+}
+
+void comm_loop_enter(void *port, int server_fd, int client_fd)
+{
+        printf("entering command loop...\n");
+
+        uint8_t buf[NET_BUF_SIZE];
+        size_t buflen = 0;
+        while (true) {
+                if (buflen >= sizeof(buf)) {
+                        // buf is full, empty it
+                        buflen = 0;
+                }
+
+                ssize_t nread = read(client_fd, buf + buflen, sizeof(buf) - buflen);
+                if (nread == 0) {
+                        printf("connection closed by peer\n");
+                        break;
+                } else if (nread == -1) {
+                        printf("error detected: %d (%s)\n", errno, strerror(errno));
+                        break;
+                }
+
+                char *end = strchr(buf, '\n');
+                if (end != NULL) {
+                        // newline in buf - split into two and process first part
+                        *end = '\0';
+                        command_process(port, buf);
+
+                        // copy remaining buffer into front part and update buflen
+                        size_t cmd_len = strlen(buf) + 1; // null byte
+                        strcpy(buf, end + 1);
+                        buflen -= cmd_len;
+                } else {
+                        buflen += nread;
+                }
+        }
+}
+
+void command_process(void *port, const char *cmd)
+{
+        if (strlen(cmd) == 0) {
+                // empty lines are possible and are thus discarded
+                return;
+        }
+
+        printf("processing command %s...\n", cmd);
+
+        if (strcmp(cmd, "reset") == 0) {
+                move_to_initial_position(port);
+        } else if (strcmp(cmd, "ping") == 0) {
+                printf("pong\n");
+        } else {
+                printf("command not recognized\n");
         }
 }
 
 // motion -------------------------------------------------------------------------------
+void move_to_initial_position(void *port)
+{
+        // TODO
+}
+
 void node_test_position_relative(void *port, uint16_t node_id)
 {
 	int32_t err;

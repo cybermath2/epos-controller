@@ -45,6 +45,15 @@ const uint32_t MAX_GEAR_INPUT_SPEED = 0; // user-specific
 // network settings
 const in_port_t RECV_PORT = 12345;
 
+// movement constants and unit conversion
+const uint32_t PPM_MAX_VELOCITY = 1000;
+
+// TODO find the exact figures
+const double DEGTOINC = 45.0 / 100000.0;
+const double INCTODEG = 1.0 / DEGTOINC;
+const double RPMTOVEL = 100.0;
+const double VELTORPM = 1.0 / RPMTOVEL;
+
 // COB-IDs for objects which cannot be configured directly through the library
 const struct cob_id COB_ID_NUMBER_OF_POLE_PAIRS = { .id = 0x3001, .sid = 0x03 };
 const struct cob_id COB_ID_TORQUE_CONSTANT      = { .id = 0x3001, .sid = 0x05 };

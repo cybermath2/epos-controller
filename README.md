@@ -1,7 +1,6 @@
 # EPOS controller
 
 ## About
-
 This piece of software represents the interface between the motion cueueing
 program and the EPOS4 motor control devices. It is able to process various
 simple commands over TCP/IP and is intended to run in the background as a
@@ -95,9 +94,9 @@ or bodily harm incurred by improper use and/or faulty setups.
 This program receives and processes commands over TCP/IP with only one active
 connection allowed at one time. Available commands are as follows:
 
-| Command             | Arg 0     | Arg 1        | Description                                                |   |
-|---------------------|-----------|--------------|------------------------------------------------------------|---|
-| `position home`     | -         | -            | Seek home position for all three axes
-| `position absolute` | axis (%s) | target (%lf) | Seek an absolute target position in degrees for given axis |   |
-| `position absolute` | axis (%s) | target (%lf) | Seek a relative target position in degrees for given axis  |   |
-| `velocity`          | axis (%s) | target (%lf) | Set velocity for given axis                                |   |
+| Command             | Arg 0     | Arg 1        | Description                                                |
+|---------------------|-----------|--------------|------------------------------------------------------------|
+| `position home`     | -         | -            | Seek home position for all three axes                      |
+| `position absolute` | axis (%s) | target (%lf) | Seek an absolute target position in degrees for given axis |
+| `position absolute` | axis (%s) | target (%lf) | Seek a relative target position in degrees for given axis  |
+| `velocity`          | axis (%s) | target (%lf) | Set velocity for given axis                                |

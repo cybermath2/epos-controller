@@ -20,7 +20,7 @@ const char *IF_NAME     = "CAN_mcp251x 0";
 const char *PORT_NAME   = "CAN0";
 
 // port settings
-const uint32_t BAUDRATE = 250000; // 250 kbit/s
+const uint32_t BAUDRATE = 1000000; // 1000 kbit/s
 const uint32_t TIMEOUT  = 500; // 500 ms
 
 // node settings

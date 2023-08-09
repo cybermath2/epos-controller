@@ -1,8 +1,4 @@
 #!/bin/sh
 
-if [ -z "$1" ]
-then
-    echo "no interface specified"
-else
-    ip link set dev "$1" down && ip link set "$1" type can bitrate 250000 && ip link set dev "$1" up
-fi
+ip link set dev "can0" down && ip link set "can0" type can bitrate 1000000 && ip link set dev "can0" up
+ip link set dev "can1" down && ip link set "can1" type can bitrate 1000000 && ip link set dev "can1" up

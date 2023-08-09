@@ -93,8 +93,11 @@ or bodily harm incurred by improper use and/or faulty setups.
 ## Command set
 
 This program receives and processes commands over TCP/IP with only one active
-connection allowed at one time. The commands are as follows (TODO):
+connection allowed at one time. Available commands are as follows:
 
-1. reset
-2. quick stop
-3. ...
+| Command             | Arg 0     | Arg 1        | Description                                                |   |
+|---------------------|-----------|--------------|------------------------------------------------------------|---|
+| `position home`     | -         | -            | Seek home position for all three axes
+| `position absolute` | axis (%s) | target (%lf) | Seek an absolute target position in degrees for given axis |   |
+| `position absolute` | axis (%s) | target (%lf) | Seek a relative target position in degrees for given axis  |   |
+| `velocity`          | axis (%s) | target (%lf) | Set velocity for given axis                                |   |

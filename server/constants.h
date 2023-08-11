@@ -10,7 +10,7 @@ struct cob_id {
         uint8_t sid;
 };
 
-#define NET_BUF_SIZE 64
+#define NET_BUF_SIZE 256
 #define MAX_STR_SIZE 64
 
 // port settings
@@ -25,8 +25,8 @@ const uint32_t TIMEOUT  = 500; // 500 ms
 
 // node settings
 const uint16_t NODE_ID_YAW 	= 3;
-const uint16_t NODE_ID_PITCH 	= -1;
-const uint16_t NODE_ID_ROLL 	= -1;
+const uint16_t NODE_ID_PITCH 	= 0xFFFF;
+const uint16_t NODE_ID_ROLL 	= 0xFFFF;
 
 // motor settings
 const uint16_t MOTOR_TYPE = MT_EC_SINUS_COMMUTATED_MOTOR; // motor-specific
@@ -43,13 +43,14 @@ const uint32_t MAX_GEAR_INPUT_SPEED = 0; // user-specific
 // ...
 
 // network settings
-const in_port_t RECV_PORT = 12345;
+const char *SERVER_IP = "127.0.0.1";
+const in_port_t SERVER_PORT = 5001;
 
 // movement constants and unit conversion
 const uint32_t PPM_MAX_VELOCITY = 1000;
 
 // TODO find the exact figures
-const double DEGTOINC = 45.0 / 100000.0;
+const double DEGTOINC = 50000.0 / 45.0;
 const double INCTODEG = 1.0 / DEGTOINC;
 const double RPMTOVEL = 100.0;
 const double VELTORPM = 1.0 / RPMTOVEL;

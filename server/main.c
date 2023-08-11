@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <net/if.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 
 #include <sys/ioctl.h>
@@ -19,6 +20,8 @@
 // SocketCAN
 #include <linux/can.h>
 #include <linux/can/raw.h>
+
+static int8_t mode_last = 0xFF;
 
 // utility -------------------------------------------------------------------------------
 void set(const struct cob_id *id, void *port, uint16_t node_id, void *p, size_t n);
@@ -31,7 +34,7 @@ void print_position(void *port, uint16_t node_id);
 void driver_info_dump(void);
 void node_info_dump(void *port, uint16_t node_id);
 void str_motor_type(char *buf, size_t n, uint16_t motor_type);
-int axis_stoi(const char *axis);
+uint16_t axis_to_node_id(const char *axis);
 
 // communications ------------------------------------------------------------------------
 void *port_open(void);
@@ -44,10 +47,12 @@ void can_read_loop(const char *port_name);
 
 // command processing -------------------------------------------------------------------
 void comm_start(void *port);
-void comm_loop_enter(void *port, int server_fd, int client_fd);
+void comm_loop_enter(void *port, int fd);
 void command_process(void *port, const char *cmd);
 
 // motion -------------------------------------------------------------------------------
+void profiles_configure(void *port, uint16_t node_id);
+void motion_halt(void *port);
 void motion_position(void *port, const char *axis, bool relative, double deg);
 void motion_velocity(void *port, const char *axis, double rpm);
 void move_to_initial_position(void *port);
@@ -55,25 +60,30 @@ void node_test_position_relative(void *port, uint16_t node_id);
 
 int main(int argc, char *argv[])
 {
-        /* driver_info_dump(); */
+        driver_info_dump();
         //can_read_loop(PORT_NAME_SOCK);
 
         void *port = port_open();
-        /* port_configure(port); */
+        port_configure(port);
 
         node_reset(port, NODE_ID_YAW);
+        node_reset(port, NODE_ID_PITCH);
+        node_reset(port, NODE_ID_ROLL);
+        // not needed since all parameters are stored in non-volatile memory
+        // node_configure(port, node_id);
         node_info_dump(port, NODE_ID_YAW);
+        node_info_dump(port, NODE_ID_PITCH);
+        node_info_dump(port, NODE_ID_ROLL);
+
+	profiles_configure(port, NODE_ID_YAW);
+	profiles_configure(port, NODE_ID_PITCH);
+	profiles_configure(port, NODE_ID_ROLL);
+        comm_start(port);
 
         int err;
         if (!VCS_SetDisableState(port, NODE_ID_YAW, &err)) {
         	die(err, "failed to set disable state");
         }
-
-        // not needed since all parameters are stored in non-volatile memory
-        // node_configure(port, node_id);
-
-        comm_start(port);
-
         port_close(port);
         return 0;
 }
@@ -207,7 +217,12 @@ void driver_info_dump(void)
 
 void node_info_dump(void *port, uint16_t node_id)
 {
-        printf("getting node information...\n");
+        printf("getting node information for node %u...\n", node_id);
+
+	if (node_id == 0xFFFF) {
+		printf("invalid node id: %u\n", node_id);
+		return;
+	}
 
         // motor parameters
         uint16_t motor_type;
@@ -265,7 +280,7 @@ void str_motor_type(char *buf, size_t n, uint16_t motor_type)
         strncpy(buf, str, n);
 }
 
-int axis_stoi(const char *axis)
+uint16_t axis_to_node_id(const char *axis)
 {
         int node_id = -1;
         if (strcmp(axis, "yaw") == 0) {
@@ -319,6 +334,11 @@ void node_reset(void *port, uint16_t node_id)
 {
         printf("resetting node %u...\n", node_id);
 
+	if (node_id == 0xFFFF) {
+		printf("invalid node id: %u\n", node_id);
+		return;
+	}
+
         uint32_t err;
         int32_t is_fault;
         if (!VCS_GetFaultState(port, node_id, &is_fault, &err)) {
@@ -351,6 +371,11 @@ void node_reset(void *port, uint16_t node_id)
 void node_configure(void *port, uint16_t node_id)
 {
         printf("configuring node %u...\n", node_id);
+
+	if (node_id == 0xFFFF) {
+		printf("invalid node id: %u\n", node_id);
+		return;
+	}
 
         printf("configuring motor parameters...\n");
 
@@ -453,61 +478,53 @@ void node_test_1rpm(void *port, uint16_t node_id)
 
 void comm_start(void *port)
 {
-        printf("entering communication loop...\n");
+        printf("starting communications...\n");
 
-        int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (server_fd == -1) {
-                die(0, "failed to instantiate sockfd");
-        }
+	int client_fd;
+	if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		die(0, "failed to create client_fd");
+	}
 
-        printf("created socket with sockfd=%d\n", server_fd);
+	printf("created socket with client_fd = %d\n", client_fd);
 
-        const int enable = 1;
-        if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(enable)) == -1) {
-                die(0, "failed to set socket options");
-        }
+	struct sockaddr_in serv_addr = {
+		.sin_family = AF_INET,
+		.sin_port = htons(SERVER_PORT)
+	};
 
-        const struct sockaddr_in sockaddr = {
-                .sin_addr.s_addr = INADDR_ANY,
-                .sin_family = AF_INET,
-                .sin_port = htons(RECV_PORT),
-        };
+	if (inet_pton(AF_INET, SERVER_IP, &serv_addr.sin_addr) <= 0) {
+		die(0, "failed to populate servr_addr struct");
+	}
 
-        if (bind(server_fd, (const struct sockaddr*)&sockaddr, sizeof(sockaddr)) == -1) {
-                die(0, "failed to bind socket");
-        }
+	if (connect(client_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1) {
+		die(0, "failed to connect to server");
+	}
 
-        if (listen(server_fd, 1) == -1) {
-                die(0, "failed to put socket in listen mode");
-        }
+	printf("trying to connect to %s:%u...\n", SERVER_IP, SERVER_PORT);
+	
+	printf("connected to server\n", client_fd);
 
-        while (1) {
-                struct sockaddr_in client_addr;
-                socklen_t client_addr_len;
-                printf("listening for new connection on port %hu...\n", RECV_PORT);
-                int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_addr_len);
-                if (client_fd == -1) {
-                        die(0, "failed to accept connection");
-                }
-
-                printf("accepted new connection with client_fd=%d\n", client_fd);
-                comm_loop_enter(port, server_fd, client_fd);
-        }
+	comm_loop_enter(port, client_fd);
 }
 
-void comm_loop_enter(void *port, int server_fd, int client_fd)
+void comm_loop_enter(void *port, int fd)
 {
         printf("entering command loop...\n");
 
-        uint8_t buf[NET_BUF_SIZE];
+        uint8_t buf[NET_BUF_SIZE] = { 0 };
         size_t buflen = 0;
         while (true) {
                 if (buflen >= sizeof(buf)) {
                         // buf is full, empty it
+			printf("warning: buffer full\n");
+			memset(buf, 0, sizeof(buf));
                         buflen = 0;
                 }
 
-                ssize_t nread = read(client_fd, buf + buflen, sizeof(buf) - buflen);
+                ssize_t nread = read(fd, buf + buflen, sizeof(buf) - buflen);
+		printf("nread=%ld\n", nread);
+		buflen += nread;
+
                 if (nread == 0) {
                         printf("connection closed by peer\n");
                         break;
@@ -516,19 +533,22 @@ void comm_loop_enter(void *port, int server_fd, int client_fd)
                         break;
                 }
 
-                char *end = strchr(buf, '\n');
-                if (end != NULL) {
-                        // newline in buf - split into two and process first part
-                        *end = '\0';
-                        command_process(port, buf);
+		while (true) {
+			char *end = strchr(buf, '\n');
+			printf("hello\n");
+			if (end != NULL) {
+				// newline in buf - split into two and process first part
+				*end = '\0';
+				command_process(port, buf);
 
-                        // copy remaining buffer into front part and update buflen
-                        size_t cmd_len = strlen(buf) + 1; // null byte
-                        strcpy(buf, end + 1);
-                        buflen -= cmd_len;
-                } else {
-                        buflen += nread;
-                }
+				// copy remaining buffer into front part and update buflen
+				size_t cmd_len = strlen(buf) + 1; // null byte
+				strcpy(buf, end + 1);
+				buflen -= cmd_len;
+			} else {
+				break;
+			}
+		}
         }
 }
 
@@ -544,55 +564,103 @@ void command_process(void *port, const char *cmd)
         } else if (sscanf(cmd, "position absolute %s %lf", s, &d) == 2) {
                 // absolute position
                 printf("%s axis: moving to absolute position %lf deg\n", s, d);
-                motion_position(port, s, false, d);
+                motion_position(port, s, true, d);
         } else if (sscanf(cmd, "position relative %s %lf", s, &d) == 2) {
                 // relative position
                 printf("%s axis: moving to relative position %lf deg\n", s, d);
-                motion_position(port, s, true, d);
+                motion_position(port, s, false, d);
         } else if (sscanf(cmd, "velocity %s %lf", s, &d) == 2) {
                 // velocity
                 printf("%s axis: moving with velocity %lf rpm\n", s, d);
                 motion_velocity(port, s, d);
-        } else {
+        } else if (strcmp(cmd, "halt") == 0) {
+		// halt
+		printf("halting movement for all axes\n");
+		motion_halt(port);
+	} else {
                 printf("invalid command: '%s'\n", cmd);
         }
 }
 
 // motion -------------------------------------------------------------------------------
-void motion_position(void *port, const char *axis, bool relative, double deg)
+void profiles_configure(void *port, uint16_t node_id)
 {
-        int node_id = axis_stoi(axis);
-        if (node_id == -1) {
-                printf("invalid axis: '%s'\n", axis);
+	printf("configuring profiles for node %u...\n", node_id);
+
+	if (node_id == 0xFFFF) {
+		printf("invalid node id: %u\n", node_id);
+		return;
+	}
+
+	uint32_t err;
+
+}
+
+void motion_halt(void *port)
+{
+	uint32_t err;
+	switch (mode_last) {
+		case OMD_PROFILE_POSITION_MODE:
+			if (!VCS_HaltPositionMovement(port, NODE_ID_YAW, &err) ||
+			    !VCS_HaltPositionMovement(port, NODE_ID_PITCH, &err) ||
+			    !VCS_HaltPositionMovement(port, NODE_ID_ROLL, &err)) {
+				die(err, "failed to halt profile position movement for one or more axes");
+			}
+			break;
+
+		case OMD_PROFILE_VELOCITY_MODE:
+			if (!VCS_HaltVelocityMovement(port, NODE_ID_YAW, &err) ||
+			    !VCS_HaltVelocityMovement(port, NODE_ID_PITCH, &err) ||
+			    !VCS_HaltVelocityMovement(port, NODE_ID_ROLL, &err)) {
+				die(err, "failed to halt profile velocity movement for one or more axes");
+			}
+			break;
+	}
+}
+
+void motion_position(void *port, const char *axis, bool absolute, double deg)
+{
+	// TODO move this up into caller
+        uint16_t node_id = axis_to_node_id(axis);
+        if (node_id == 0xFFFF) {
+                printf("invalid node id: '%s'\n", axis);
                 return;
         }
 
+	printf("moving to new position %lf\n", deg);
+
         uint32_t err;
-        if (!VCS_ActivateProfilePositionMode(port, node_id, &err)) {
-                die(err, "failed to activate profile position mode");
-        }
+	// activate mode only if necessary
+	mode_last = OMD_PROFILE_POSITION_MODE;
+
+	if (!VCS_ActivateProfilePositionMode(port, node_id, &err)) {
+		die(err, "failed to activate profile position mode");
+	}
 
         if (!VCS_SetPositionProfile(port, node_id, PPM_MAX_VELOCITY, 1000, 1000, &err)) {
                 die(err, "failed to set position profile");
         }
 
-        if (!VCS_MoveToPosition(port, node_id, deg * DEGTOINC, relative, true, &err)) {
+        if (!VCS_MoveToPosition(port, node_id, deg * DEGTOINC, absolute, true, &err)) {
                 die(err, "failed to move to position");
         }
 }
 
 void motion_velocity(void *port, const char *axis, double rpm)
 {
-        int node_id = axis_stoi(axis);
-        if (node_id == -1) {
-                printf("invalid axis: '%s'\n", axis);
+        uint16_t node_id = axis_to_node_id(axis);
+        if (node_id == 0xFFFF) {
+                printf("invalid node id: '%s'\n", axis);
                 return;
         }
 
         uint32_t err;
-        if (!VCS_ActivateProfileVelocityMode(port, node_id, &err)) {
-                die(err, "failed to activate profile velocity mode");
-        }
+	// activate mode only if necessary
+	mode_last = OMD_PROFILE_VELOCITY_MODE;
+
+	if (!VCS_ActivateProfileVelocityMode(port, node_id, &err)) {
+		die(err, "failed to activate profile velocity mode");
+	}
 
         if (!VCS_SetVelocityProfile(port, node_id, 1000, 1000, &err)) {
                 die(err, "failed to set velocity profile");

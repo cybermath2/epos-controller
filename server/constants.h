@@ -1,5 +1,8 @@
 #pragma once
 
+// don't include this file twice - it is bad practice to put definitions into a
+// header instead of externalizing and linking them, but we don't care
+
 #include <stdint.h>
 #include <netinet/in.h>
 

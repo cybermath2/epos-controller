@@ -34,7 +34,7 @@ CANopen protocol. CAN resides on the physical and data link layer and CANopen
 implements the network layer and above layers. CAN support for the Raspberry Pi
 is achieved through a CAN head with two 3-pin connections (H,L,G) sitting on
 top of it and kernel drivers exposing a CAN0 and CAN1 interface. This project
-uses a baud rate of 250kbit/s and a timeout of 500ms, so every interface and
+uses a baud rate of 1000kbit/s and a timeout of 500ms, so every interface and
 software port should be configured accordingly. CAN0 is connected to CANOpen
 which is used for motion control and CAN1 to CANAerospace which is used for
 instruments and control input. The driver used is `CAN_mcp251x 0`. A script to

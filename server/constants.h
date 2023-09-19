@@ -49,7 +49,7 @@ const in_port_t SERVER_PORT = 5001;
 // movement constants and unit conversion
 const uint32_t PPM_MAX_VELOCITY = 1000;
 
-// TODO find the exact figures
+// TODO find the exact values
 const double DEGTOINC = 50000.0 / 45.0;
 const double INCTODEG = 1.0 / DEGTOINC;
 const double RPMTOVEL = 100.0;

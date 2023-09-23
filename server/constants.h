@@ -13,8 +13,7 @@ struct cob_id {
         uint8_t sid;
 };
 
-#define NET_BUF_SIZE 256
-#define MAX_STR_SIZE 64
+#define MAX_STR_SIZE 128
 
 // port settings
 const char *DEV_NAME    = "EPOS4";
@@ -44,6 +43,8 @@ const uint32_t MAX_GEAR_INPUT_SPEED = 0; // user-specific
 // position sensor settings
 // application settings
 // ...
+const int32_t POS_DEG_MIN = -45;
+const int32_t POS_DEG_MAX =  45;
 
 // network settings
 const char *SERVER_IP = "127.0.0.1";
@@ -67,3 +68,11 @@ const struct cob_id COB_ID_MAX_GEAR_INPUT_SPEED = { .id = 0x3003, .sid = 0x03 };
 const struct cob_id COB_ID_UNIT_POS = { .id = 0x60A8 };
 const struct cob_id COB_ID_UNIT_VEL = { .id = 0x60A9 };
 const struct cob_id COB_ID_UNIT_ACC = { .id = 0x60AA };
+
+const struct cob_id COB_ID_FAULT_CODE 	  = { .id = 0x605E };
+const struct cob_id COB_ID_ERROR_REGISTER = { .id = 0x1001 };
+const struct cob_id COB_ID_STATUS_WORD 	  = { .id = 0x6041 };
+
+// software-defined position limit
+const struct cob_id COB_ID_MIN_POS = { .id = 0x607D, .sid = 0x01 };
+const struct cob_id COB_ID_MAX_POS = { .id = 0x607D, .sid = 0x02 };

@@ -69,15 +69,15 @@ int main(int argc, char *argv[])
 	port_open();
         port_configure();
 
-        node_reset(NODE_ID_YAW);
-        //node_reset(NODE_ID_PITCH);
+        //node_reset(NODE_ID_YAW);
+        node_reset(NODE_ID_PITCH);
         //node_reset(NODE_ID_ROLL);
 
-        node_configure(NODE_ID_YAW);
+        //node_configure(NODE_ID_YAW);
         //node_configure(NODE_ID_PITCH);
         //node_configure(NODE_ID_ROLL);
 
-        node_info_dump(NODE_ID_YAW);
+        //node_info_dump(NODE_ID_YAW);
         //node_info_dump(NODE_ID_PITCH);
         //node_info_dump(NODE_ID_ROLL);
 
@@ -101,7 +101,7 @@ void set(const struct cob_id *id, uint16_t node_id, void *p, size_t n)
         uint32_t bytes_written;
         uint32_t err;
         if (!VCS_SetObject(port, node_id, id->id, id->sid, p, n, &bytes_written, &err)) {
-                die(err, "failed to set object %x-%x", id->id, id->sid);
+                die(err, "failed to set object %X-%X", id->id, id->sid);
         }
 }
 
@@ -111,7 +111,7 @@ void get(void *buf, size_t n, uint16_t node_id, const struct cob_id *id)
         uint32_t bytes_read;
         uint32_t err;
         if (!VCS_GetObject(port, node_id, id->id, id->sid, buf, n, &bytes_read, &err)) {
-                die(err, "failed to get object %x-%x", id->id, id->sid);
+                die(err, "failed to get object %X-%X", id->id, id->sid);
         }
 }
 
@@ -121,17 +121,40 @@ void die(uint32_t err, const char *what, ...)
         va_start(args, what);
         fprintf(stderr, "\033[1;31m");
         vfprintf(stderr, what, args);
-        fprintf(stderr, " (error code 0x%x)", err);
+        fprintf(stderr, " (error code 0x%X)", err);
         va_end(args);
 
         if (err != 0) {
                 char err_info[MAX_STR_SIZE];
                 if (VCS_GetErrorInfo(err, err_info, MAX_STR_SIZE)) {
-                        fprintf(stderr, ": %s", err_info);
+                        fprintf(stderr, ": %s\n", err_info);
                 }
         }
 
-        fprintf(stderr, "\n\033[1;0m");
+	fprintf(stderr, "node-specific errors follow:\n");
+
+	uint16_t ids[] = { NODE_ID_YAW, NODE_ID_PITCH, NODE_ID_ROLL };
+
+	for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); i++) {
+		uint16_t id = ids[i];
+		uint8_t num_err;
+		if (VCS_GetNbOfDeviceError(port, id, &num_err, &err)) {
+			fprintf(stderr, "node %u\n", id);
+
+			for (uint8_t i = 1; i <= num_err; i++) {
+				uint32_t device_err;
+				char err_info[MAX_STR_SIZE];
+				if (!VCS_GetDeviceErrorCode(port, id, num_err, &device_err, &err) ||
+				    !VCS_GetErrorInfo(device_err, err_info, MAX_STR_SIZE)) {
+					continue;
+				}
+
+				fprintf(stderr, "|-> (error code 0x%X): %s\n", device_err, err_info);
+			}
+		}
+	}
+
+        fprintf(stderr, "\033[1;0m\n");
         exit(1);
 }
 
@@ -310,7 +333,7 @@ void port_open(void)
                 die(err, "failed to open port");
         }
 
-        printf("port opened: handle=0x%p\n", port);
+        printf("port opened: handle=0x%X\n", port);
 }
 
 void port_close(void)
@@ -368,13 +391,6 @@ void node_reset(uint16_t node_id)
                 // enable device
                 printf("device not enabled - enabling now...\n");
                 if (!VCS_SetEnableState(port, node_id, &err)) {
-			uint8_t e;
-			get(&e, sizeof(e), node_id, &COB_ID_ERROR_REGISTER);
-			printf("%x\n", e);
-
-			uint16_t s;
-			get(&s, sizeof(s), node_id, &COB_ID_STATUS_WORD);
-			printf("%x\n", s);
                         die(err, "failed to set enable state");
                 }
 

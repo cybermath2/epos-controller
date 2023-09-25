@@ -27,8 +27,8 @@ const uint32_t TIMEOUT  = 500; // 500 ms
 
 // node settings
 const uint16_t NODE_ID_YAW 	= 3;
-const uint16_t NODE_ID_PITCH 	= 0xFFFF;
-const uint16_t NODE_ID_ROLL 	= 0xFFFF;
+const uint16_t NODE_ID_PITCH 	= 2;
+const uint16_t NODE_ID_ROLL 	= 1;
 
 // motor settings
 const uint16_t MOTOR_TYPE = MT_EC_SINUS_COMMUTATED_MOTOR; // motor-specific
@@ -74,5 +74,6 @@ const struct cob_id COB_ID_ERROR_REGISTER = { .id = 0x1001 };
 const struct cob_id COB_ID_STATUS_WORD 	  = { .id = 0x6041 };
 
 // software-defined position limit
-const struct cob_id COB_ID_MIN_POS = { .id = 0x607D, .sid = 0x01 };
+const struct cob_id 
+COB_ID_MIN_POS = { .id = 0x607D, .sid = 0x01 };
 const struct cob_id COB_ID_MAX_POS = { .id = 0x607D, .sid = 0x02 };

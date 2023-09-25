@@ -69,15 +69,19 @@ int main(int argc, char *argv[])
 	port_open();
         port_configure();
 
-        //node_reset(NODE_ID_YAW);
-        node_reset(NODE_ID_PITCH);
+	uint8_t sto_state;
+	get(&sto_state, sizeof(sto_state), NODE_ID_YAW, &COB_ID_STO_STATES);
+	printf("0x%X\n", sto_state);
+
+        node_reset(NODE_ID_YAW);
+        //node_reset(NODE_ID_PITCH);
         //node_reset(NODE_ID_ROLL);
 
-        //node_configure(NODE_ID_YAW);
+        node_configure(NODE_ID_YAW);
         //node_configure(NODE_ID_PITCH);
         //node_configure(NODE_ID_ROLL);
 
-        //node_info_dump(NODE_ID_YAW);
+        node_info_dump(NODE_ID_YAW);
         //node_info_dump(NODE_ID_PITCH);
         //node_info_dump(NODE_ID_ROLL);
 

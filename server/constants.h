@@ -43,11 +43,11 @@ const uint32_t MAX_GEAR_INPUT_SPEED = 0; // user-specific
 // position sensor settings
 // application settings
 // ...
-const int32_t POS_DEG_MIN = -45;
-const int32_t POS_DEG_MAX =  45;
+const int32_t POS_DEG_MIN = 0;
+const int32_t POS_DEG_MAX = 0;
 
 // network settings
-const char *SERVER_IP = "127.0.0.1";
+const char *SERVER_IP = "137.248.121.40";
 const in_port_t SERVER_PORT = 5001;
 
 // movement constants and unit conversion
@@ -72,6 +72,7 @@ const struct cob_id COB_ID_UNIT_ACC = { .id = 0x60AA };
 const struct cob_id COB_ID_FAULT_CODE 	  = { .id = 0x605E };
 const struct cob_id COB_ID_ERROR_REGISTER = { .id = 0x1001 };
 const struct cob_id COB_ID_STATUS_WORD 	  = { .id = 0x6041 };
+const struct cob_id COB_ID_STO_STATES 	  = { .id = 0x3202, .sid = 0x01 };
 
 // software-defined position limit
 const struct cob_id 

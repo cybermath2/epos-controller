@@ -1,6 +1,5 @@
 # EPOS controller
 
-## About
 This piece of software represents the interface between the motion cueueing
 program and the EPOS4 motor control devices. It is able to process various
 simple commands over TCP/IP and is intended to run in the background as a
@@ -8,9 +7,20 @@ daemon. We chose TCP/IP as the interface to be independent of local IPC
 mechanism and to allow distributed control of the simulator axes in case this
 is desired in the future.
 
+![EPOS4 with two connected CAN cables and STO connector](./res/epos_1.jpg){ width=80% }
+
+## Further reading (`./manuals/`)
+
+| Name                                                                     | Description                                                               |
+|--------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| [Application Notes](./manuals/EPOS4-Application-Notes-Collection-En.pdf) | Brief introductions to various topics and a general overview of procedure |
+| [Firmware Specification](./manuals/EPOS4-Firmware-Specification-En.pdf)  | Firmware details like error codes, commands, modes and the state machine  |
+| [Hardware Reference](./manuals/EPOS4-50-5-Hardware-Reference-En.pdf)     | Hardware details like pin assignments and wiring                          |
+| [Command Library](./manuals/EPOS-Command-Library-En.pdf)                 | Command library documentation                                             |
+
 ## Building and dependencies
 
-The EPOS Command Library header can be found in server/deps/ and serves as an
+The EPOS Command Library header can be found in `./client/deps/` and serves as an
 interface to its functions as well as a provider for constant definitions.
 Dynamic libraries for ARMv{6,7,8} as well as i386 and amd64 for Linux to link
 against can be found in lib/lib/. Please note these can be installed on the
@@ -31,20 +41,23 @@ potentially troublesome parts as well as on the communication protocol.
 
 All devices are connected together on a CAN bus and communicate through the
 CANopen protocol. CAN resides on the physical and data link layer and CANopen
-implements the network layer and above layers. CAN support for the Raspberry Pi
-is achieved through a CAN head with two 3-pin connections (H,L,G) sitting on
-top of it and kernel drivers exposing a CAN0 and CAN1 interface. This project
-uses a baud rate of 1000kbit/s and a timeout of 500ms, so every interface and
-software port should be configured accordingly. CAN0 is connected to CANOpen
-which is used for motion control and CAN1 to CANAerospace which is used for
-instruments and control input. The driver used is `CAN_mcp251x 0`. A script to
-set up an interface can be found in scripts/.
+implements the network layer and above layers in the OSI model. CAN support for
+the Raspberry Pi is achieved through a CAN head with two 3-pin connections
+(H,L,G) sitting on top of it and kernel drivers exposing a CAN0 and CAN1
+interface. This project uses a baud rate of 1000kbit/s and a timeout of 500ms,
+so every interface and software port should be configured accordingly. CAN0 is
+connected to CANOpen which is used for motion control and CAN1 to CANAerospace
+which is used for instruments and control input. The driver used is
+`CAN_mcp251x 0`. A script to set up an interface can be found in `./scripts/`.
 
 Attention shold be given to proper wiring and a correct termination resistance
 of 120 Ohms at the end of the bus. This can be realized by toggling DIP switch
-7 to the ON position. Wiring errors usually manifest themselves in BUS-OFF
-errors and a NO-CARRIER state on the interface. Interface state can be queried
-using `ip -details link`.
+7 to the ON position. DIP switches are also used for setting the id of each
+node. Wiring errors usually manifest themselves in BUS-OFF errors and a
+NO-CARRIER state on the interface. Interface state can be queried using `ip
+-details link`.
+
+![EPOS4 with DIP switches 2 (node id = 2) and 7 (120 Ohms termination resistance) set](./res/epos_0.jpg){ width=80% }
 
 Useful tools for debugging a CAN bus can be found in
 [linux-can/can-utils](https://github.com/linux-can/can-utils) and include
@@ -100,3 +113,63 @@ connection allowed at one time. Available commands are as follows:
 | `position absolute` | axis (%s) | target (%lf) | Seek an absolute target position in degrees for given axis |
 | `position absolute` | axis (%s) | target (%lf) | Seek a relative target position in degrees for given axis  |
 | `velocity`          | axis (%s) | target (%lf) | Set velocity for given axis                                |
+
+## TODO
+
+- implement homing with the help of external position sensors
+- find accurate values for DEGTOINC and RPMTOVEL
+- make the movement more smooth
+- in case a text-based TCP protocol is too slow, replace by/supplement with binary UDP protocol
+- add additional commands
+- if you feel fancy, restructure the code into multiple files
+
+# RasCanServer
+
+The RasCanServer is the central part mediating communications between all other
+components. Currently its job includes passing data between the
+SimulatorInterface on the Windows machine and the CANaerospace bus by means of
+the `./Pi und Arduino/Pi/ThreadTest.py` script as well as intercepting
+motion-relevant messages, calculating a motion profile and sending these
+commands to the epos\_controller.
+
+```
+                       epos_controller
+                              ^
+       ThreadTest.py <-> RasCanServer <-> SimulatorInterface
+```
+
+## Build instructions
+
+Since the project is written in C#, we use the dotnet SDK to build a runnable
+package. The following commands can be used to create a bundle and upload it to
+the Raspberry Pi using the `rsync` utility:
+
+```
+dotnet publish --runtime linux-arm --self-contained && \
+rsync -avu bin/Debug/net6.0/linux-arm/ \
+mrfas@137.248.121.40:/home/mrfas/rascanserver
+```
+
+## TODO
+
+- proper motion cueing for a three-axes flight simulator should be implemented
+  to accurately model forces experienced by the pilot mid-flight
+- the program crashes in some cases (probably a race condition), this should be
+  debugged and fixed
+
+# SimulatorInterface
+
+SimulatorInterface is responsible for communicating with the flight simulator
+through the ISimAdapter and for managing input and output variables as defined
+in `./datamodel/SimvarsInput.xml` and `./datamodel/SimvarsOutput.xml`. On
+startup, it connects to the RasCanServer to send and retrieve flight simulator
+data. To ensure proper redirection of variables defined in
+`./datamodel/SimvarsOutput.xml` to the CANaerospace bus, make sure to set
+`<iCanId>` and also `<eTransmissionSlot>`, otherwise no data will be sent. For
+reference on how to implement ISimAdapter and navigate this callback jungle,
+refer to `./steering/SteeringAdapter.cs`.
+
+## TODO
+
+- move `useSimulatortype` and other variables into an external config file so one
+  doesn't need to recompile everything

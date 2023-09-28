@@ -25,7 +25,7 @@
 static int8_t mode_last = 0xFF;
 static void *port = NULL;
 
-// utility -------------------------------------------------------------------------------
+// utility ----------------------------------------------------------------------------------------
 void set(const struct cob_id *id, uint16_t node_id, void *p, size_t n);
 void get(void *buf, size_t n, uint16_t node_id, const struct cob_id *id);
 void die(uint32_t err, const char *what, ...);
@@ -38,24 +38,24 @@ void node_info_dump(uint16_t node_id);
 void str_motor_type(char *buf, size_t n, uint16_t motor_type);
 uint16_t axis_to_node_id(const char *axis);
 
-// communications ------------------------------------------------------------------------
-void port_open(void);
-void port_close(void);
-void port_configure(void);
-void node_reset(uint16_t node_id);
-void node_configure(uint16_t node_id);
+// communications ---------------------------------------------------------------------------------
+void port_open(void);                  // open a handle to the CAN port for communication
+void port_close(void);                 // close the handle
+void port_configure(void);             // set port parameters (baud rate, timeout)
+void node_reset(uint16_t node_id);     // clear fault state and enable node
+void node_configure(uint16_t node_id); // set node parameters (range of motion, acceleration...)
 
-void can_read_loop(const char *port_name);
+void can_read_loop(const char *port_name); // read and process raw can frames from the port
 
-// command processing -------------------------------------------------------------------
-void comm_start(void);
+// command processing -----------------------------------------------------------------------------
+void comm_start(void);                 // connect to server
 void comm_loop_enter(int fd);
 void command_process(const char *cmd);
 
 void int_handler(int signo);
 void exit_gracefully(void);
 
-// motion -------------------------------------------------------------------------------
+// motion -----------------------------------------------------------------------------------------
 void motion_halt(void);
 void motion_position(const char *axis, bool relative, double deg);
 void motion_velocity(const char *axis, double rpm);
@@ -135,6 +135,11 @@ void die(uint32_t err, const char *what, ...)
                 }
         }
 
+        if (port == NULL) {
+            // only print node-specific errors if port is set
+            goto end;
+        }
+
 	fprintf(stderr, "node-specific errors follow:\n");
 
 	uint16_t ids[] = { NODE_ID_YAW, NODE_ID_PITCH, NODE_ID_ROLL };
@@ -158,6 +163,7 @@ void die(uint32_t err, const char *what, ...)
 		}
 	}
 
+end:
         fprintf(stderr, "\033[1;0m\n");
         exit(1);
 }
@@ -588,8 +594,8 @@ void exit_gracefully(void)
 
         uint32_t err;
         if (!VCS_SetDisableState(port, NODE_ID_YAW, &err)
-          || VCS_SetDisableState(port, NODE_ID_PITCH, &err)
-          || VCS_SetDisableState(port, NODE_ID_ROLL, &err)) {
+         || !VCS_SetDisableState(port, NODE_ID_PITCH, &err)
+         || !VCS_SetDisableState(port, NODE_ID_ROLL, &err)) {
         	die(err, "failed to set disable state");
         }
 
@@ -638,14 +644,14 @@ void motion_position(const char *axis, bool absolute, double deg)
 	printf("moving to new position %lf\n", deg);
 
         uint32_t err;
-	// activate mode only if necessary
 	mode_last = OMD_PROFILE_POSITION_MODE;
 
+        // TODO only activate if necessary so we don't have to do this every time
 	if (!VCS_ActivateProfilePositionMode(port, node_id, &err)) {
 		die(err, "failed to activate profile position mode");
 	}
 
-        // TODO move into node_configure()
+        // TODO move into node_configure() so we don't have to do this every time
         if (!VCS_SetPositionProfile(port, node_id, PPM_MAX_VELOCITY, 1000, 1000, &err)) {
                 die(err, "failed to set position profile");
         }
@@ -664,13 +670,14 @@ void motion_velocity(const char *axis, double rpm)
         }
 
         uint32_t err;
-	// activate mode only if necessary
 	mode_last = OMD_PROFILE_VELOCITY_MODE;
 
+        // TODO only activate if necessary so we don't have to do this every time
 	if (!VCS_ActivateProfileVelocityMode(port, node_id, &err)) {
 		die(err, "failed to activate profile velocity mode");
 	}
 
+        // TODO move into node_configure() so we don't have to do this every time
         if (!VCS_SetVelocityProfile(port, node_id, 1000, 1000, &err)) {
                 die(err, "failed to set velocity profile");
         }
@@ -678,6 +685,8 @@ void motion_velocity(const char *axis, double rpm)
         if (!VCS_MoveWithVelocity(port, node_id, rpm * RPMTOVEL, &err)) {
                 die(err, "failed to move with velocity");
         }
+
+        // sleep(5); uncomment to move for five seconds
 
         if (!VCS_HaltVelocityMovement(port, node_id, &err)) {
                 die(err, "failed to halt velocity movement");

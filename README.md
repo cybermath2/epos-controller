@@ -1,6 +1,34 @@
----
-geometry: margin=30mm
----
+# Component overview
+
+![](./res/architecture.drawio.pdf)
+
+Lots of different programming languages are being used in this project. The main
+program code is currently split into two repositories:
+
+## epos-controller ([baseng0815/epos-controller](https://github.com/Baseng0815/epos-controller/))
+
+EPOS4 code for motion control, written in C.
+
+| location                                                                                       | description                              |
+|------------------------------------------------------------------------------------------------|------------------------------------------|
+| [./lib/](https://github.com/Baseng0815/epos-controller/tree/master/lib)                        | maxon libraries and sample code          |
+| [./client/](https://github.com/Baseng0815/epos-controller/tree/master/client)                  | source code and Makefile                 |
+| [./manuals/](https://github.com/Baseng0815/epos-controller/tree/master/manuals)                | maxon manuals                            |
+| [./scripts/](https://github.com/Baseng0815/epos-controller/tree/master/scripts)                | utility scripts                          |
+| [./Epos4-Node2.dcf](https://github.com/Baseng0815/epos-controller/tree/master/Epos4-Node2.dcf) |                                          |
+| [./res/](https://github.com/Baseng0815/epos-controller/tree/master/res)                        | resources used to generate this document |
+
+## simulator-interface ([cybermath2/simulator-interface/](https://github.com/cybermath2/simulator-interface/))
+
+The rest, written mainly in C# and Python.
+
+| location                                                                                                                             | description                                               |
+|--------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
+| [./Pi und Arduino/Arduino/](https://github.com/cybermath2/simulator-interface/tree/main/Pi%20und%20Arduino/Arduino)                  | CAN code for Arduinos                                     |
+| [./Pi und Arduino/Pi/ThreadTest.py](https://github.com/cybermath2/simulator-interface/blob/main/Pi%20und%20Arduino/Pi/ThreadTest.py) | important script interfacing with the CANaerospace bus    |
+| [./CommonLogic/](https://github.com/cybermath2/simulator-interface/tree/main/CommonLogic)                                            | (high-level) shared logic like can frames, can streams... |
+| [./RasCanServer/](https://github.com/cybermath2/simulator-interface/tree/main/RasCanServer)                                          | the central component connecting everything together      |
+| [./SimulatorInterface/](https://github.com/cybermath2/simulator-interface/tree/main/SimulatorInterface)                              | responsible for interfacing with simulators (MFS, P3D...) |
 
 # EPOS controller (`./epos-controller/`)
 
@@ -24,8 +52,8 @@ is desired in the future.
 
 ## Building and dependencies
 
-The EPOS Command Library header can be found in `./client/deps/` and serves as an
-interface to its functions as well as a provider for constant definitions.
+The EPOS Command Library header can be found in `./client/deps/` and serves as
+an interface to its functions as well as a provider for constant definitions.
 Dynamic libraries for ARMv{6,7,8} as well as i386 and amd64 for Linux to link
 against can be found in lib/lib/. Please note these can be installed on the
 system through the lib/install.sh script or by simply moving the dynamic
@@ -103,6 +131,11 @@ Controllers and torque are only activated when the device is in the enabled
 state. This means that while the device is enabled, it cannot be moved by hand
 and doesn't require an outside braking force to hold its position.
 
+An extremely useful program for directly connecting to the EPOS, dynamically
+configuring parameters and debugging problems is EPOS Studio for Windows
+operating systems which can be downloaded from
+[here](https://www.maxongroup.com/medias/sys_master/root/8994863841310/EPOS-2-4-IDX-Setup.zip).
+
 The author of this document can in no way be held responsible for any material
 or bodily harm incurred by improper use and/or faulty setups.
 
@@ -130,6 +163,7 @@ commands are as follows:
   whole turn instead of doing nothing. This is a problem when position input
   like the heading wraps around and causes the respective axis to do a
   full-speed, 360deg turn
+- set software position limits for pitch and roll axes
 - make movement more smooth by using velocities instead of positions
 - in case a text-based TCP protocol is too slow, replace by/supplement with binary UDP protocol
 - add additional commands
@@ -185,199 +219,3 @@ refer to `./steering/SteeringAdapter.cs`.
 
 - move `useSimulatortype` and other variables into an external config file so
   one doesn't need to recompile everything
-
-# Heading-Indicator and adjacent instruments
-
-The Heading-Indicator case contains the Arduino. The case has two serial ports,
-one for the CAN-Bus and the other one for the connection with four additional
-instruments:
-
-- Airspeed-Indicator
-- Variometer
-- Turn and Bank indicator (Turn and TurnBall), which has two separate
-  connections for the Turn-indicator and the TurnBall.
-
-![All five instruments are connected to the same
-Arduino](./res/adjacent_instruments.jpg)
-
-The Arduino receives the data from the Flight Simulator via the PI and
-recalculates them to PWM values (0 to 255) for the Output-Pins on the Arduino.
-For the Variometer, Airspeed indicator and Turn and Bank indicator the
-recalculation is not straight forward, since they have a Hysteresis-Offset (see
-example diagrams for Variometer-Climb rate and Airspeed):
-
-![](./res/pwm_climbrate.png){width=50%}
-![](./res/pwm_airspeed.png){width=50%}
-
-This can be dealt with either linear interpolation or a modelling approach,
-which incorporates for e.g., the Hysteresis-Offset.
-
-The control for the Variometer, Airspeed Indicator and Turn and Bank indicator
-is simply just done over the output pins on the Arduino. For the
-Heading-Indicator a stepper-motor is included in the case, which controls the
-movement of the Heading-Indicator disc. Additionally an encoder for a
-push-button is included, which allows for e.g., to change the Heading-Indicator
-position or reset it to a default value.
-
-# CANaerospace Node-Service-protocol
-
-CANaerospace allows the implementation of different services via CANAerospace.
-Node-Services are divided into two categories:
-
-- NSH (High Priority Node Service Data)
-- NSL (Low Priority Node Service Data)
-
-Both are differentiated through the Node Service Channel used. Channels from
-0-35 (NSH) and 100-115 (NSL). One Channel corresponds to two Node-Service-IDs,
-one for the request and one for the response, for e.g., Channel 0 has the Node
-Service Request ID of 128 and a Node Service Response ID 129. The definition of
-the Node Service IDs is part of the CANaerospace Identifier-Distribution (see
-CANaerospace specification). Which services are implemented, and which service
-uses which channels are user defined, the only service which has mandatory
-implementation is the IDS-service.
-
-## CANaerospace-frames for Node-Services
-
-CANaerospace frame consists of 8 bytes:
-
-![](./res/canas_frame.png)
-
-- Node-ID: In case of Node-services the Node-ID will be the Node-ID of the Node
-  which receives the request (Also 0 for broadcast possible).
-- Datatype: The Datatype gives the type of data included in the message data
-  part.
-- Service-Code: Gives the used service (for service types see CANaerospace
-  specification).
-- Message-Code: Usage depended on specific service.
-
-Note that the Node-ID, Service-Code and Message-Code definitions differ from
-normal CANaerospace data operation ((NOD) Normal Operation Data), which is used
-e.g., for sending data from the Flight-Simulator to the different instruments.
-In general nodes should answer within 100ms to a Node-Service request, if not
-otherwise defined in the CANaerospace specification.
-
-## IDS-service (Identification service):
-
-The IDS-service can be used as a sign-of-life indication between the
-CANaerospace nodes and to check if all Nodes use the same CANAerospace
-Identifier-Distribution/Header-Types. What happens e.g., for missing signs of
-life or if different CANAersopace Identifer-Distributions are used is user
-defined. The IDS service should be implemented on Channel 0. The request ID in
-this case is 128 and the response ID is 129. For the specific frame definition
-see page 14 of the CANAerospace specification.
-
-## Other services:
-
-Besides IDS CANaerospace allows other services defined in the specification or
-user defined. The channels for these are also user defined, in general each
-node should have its own Node Service Channel (this means a Node Service
-Request Id and a Node Service Response Id). Specification defined services used
-in this project are (besides IDS):
-
-- (BSS) Baudrate Setting Service: For setting the Baudrate for the Node-Id for
-  CAN-communication (see page 20 in the CANaerospace specification for the
-  frame definition).
-- Node-ID Setting Service (NIS): For setting the Node-Id of the node (see page
-  21 in the CANaerospace specification for the frame definition).
-- User defined Services: The Service codes from 100 to 255 can be user defined
-  e.g., for sending calibration data.
-
-## TODO:
-
-- CANaerospace Node services:
-    - The Node-services must be implemented on all CANaerospace nodes.
-    - In case of the IDS-service, the logic of failure handling has to be
-      implemented:
-        - A missing sign-of-life of a node could produce a warning for the
-          pilot.
-        - Distribution-Identifier/Header-type synchronization in case differing
-          settings are found in the nodes (There are already predefined
-          Node-Services which can be used in this case).
-    - User defined calibration services has to be implemented.
-- A calibration application must be created, which allows the calibration of
-  the different instruments.
-
-# 3D parts and models
-
-FreeCAD software was used to create CAD models. Each self-created file was
-saved as the following 3 file types:
-
-- `FCStd` (for editing in Freecad)
-- `.step` (for production at Feinmechanikwerkstatt)
-- `.stl` (for easy import and review in Blender etc.)
-
-Self-created models can be produced via the precision mechanics workshop (FMW).
-The FMW requires the respective model as ".step" file. Platform and plate for
-PC & control cabinet are self-created CAD files, optimized and produced by the
-FMW.
-
-## SimulatorBackside
-
-The file "SimulatorBackside" is an image of the cockpit backside under the seat
-area with the protruding metal floor on which the platform and plate rest.
-Relevant to draw the platform and plate to fit.
-
-![](./res/simulator_backside.png){width=80%}
-
-### Backside measurements
-
-It is based on following measurements:
-
-![](./res/measurement_0.jpeg){width=50%}
-![](./res/measurement_1.jpeg){width=50%}
-
-### Platform
-
-The platform is a modified replica of the original metal plate. This way its
-ensured to fit and cover our needs.
-
-![](./res/platform_original.jpeg){width=80%}
-
-It is attached to the protruding base plate of the flight simulator. At the 4
-corners are columns, on which the upper plate for the PC and control cabinet is
-attached. In addition, there is a square the fan attachment to the platform.
-
-![](./res/platform_part.png){width=80%}
-
-### Platform plate
-
-The next part is the plate that is plugged on the platform on which the control
-cabinet and PC sit. It has a total width of 355mm, and the separator wall is
-500mm high. The short side is 120mm wide, with a rectangular recess which is
-300mm long and 50mm wide. The recess is important for guiding the power cables
-into the power box. The long side is 234mm wide. The PC is placed on this side.
-
-![The plate to go on top of the platform](./res/platform_plate.png){width=80%}
-
-![Dimensions of the switch cabinet.](./res/switch_cabinet.jpeg){width=80%}
-
-### Blender file view
-
-Blender file view – used to check if the models fit in the back. When importing
-any file into Blender, make sure to edit the scale parameter to 0.01 to get
-accurate representation.
-
-![](./res/blender_0.png){width=50%}
-![](./res/blender_1.png){width=50%}
-
-![Current State – with all objects placed into the Simulator](./res/backside.jpg){width=80%}
-
-
-## TODO
-
-We do not have a Raspberry Pi case yet. The current idea is to make a minimal
-case that can be plugged onto a pegboard to enable free dynamic placement.
-Since the simulators pitch and roll axis are limited to 30-40 degrees of
-movement, high case walls are not required. Just enough to keep the Pi in place
-should be sufficient.
-
-![Raspberry Pi 4B measurements](./res/raspi_dimensions.jpeg){width=50%}
-![3D Model of Raspberry 4B (CAN Hat not shown!), Source: Andrä](./res/raspi_3d.png){width=50%}
-
-We do not have a pegboard yet. The idea is to put it on the platform so that
-devices can be plugged freely onto the surface under the area of the PC and
-control cabinet.
-
-Additionally, a pegboard friendly case for the network switch will be needed.
-Depending on project demand, further models might be needed, but for now it is
-all listed above.

@@ -452,9 +452,10 @@ void node_configure(uint16_t node_id)
         }
 	*/
 
+        // TODO software position limits
 	printf("setting motion range of [%d, %d]...\n", POS_DEG_MIN, POS_DEG_MAX);
-        set(&COB_ID_MIN_POS, node_id, &POS_DEG_MIN, sizeof(POS_DEG_MIN));
-        set(&COB_ID_MAX_POS, node_id, &POS_DEG_MAX, sizeof(POS_DEG_MAX));
+        set(&COB_ID_MIN_POS, node_id, (void*)&POS_DEG_MIN, sizeof(POS_DEG_MIN));
+        set(&COB_ID_MAX_POS, node_id, (void*)&POS_DEG_MAX, sizeof(POS_DEG_MAX));
 }
 
 

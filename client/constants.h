@@ -75,6 +75,5 @@ const struct cob_id COB_ID_STATUS_WORD 	  = { .id = 0x6041 };
 const struct cob_id COB_ID_STO_STATES 	  = { .id = 0x3202, .sid = 0x01 };
 
 // software-defined position limit
-const struct cob_id 
-COB_ID_MIN_POS = { .id = 0x607D, .sid = 0x01 };
+const struct cob_id COB_ID_MIN_POS = { .id = 0x607D, .sid = 0x01 };
 const struct cob_id COB_ID_MAX_POS = { .id = 0x607D, .sid = 0x02 };

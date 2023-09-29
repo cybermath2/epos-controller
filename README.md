@@ -1,6 +1,6 @@
 # Component overview
 
-![](./res/architecture.drawio.pdf)
+![](./res/architecture.jpg)
 
 Lots of different programming languages are being used in this project. The main
 program code is currently split into two repositories:
@@ -39,7 +39,7 @@ daemon. We chose TCP/IP as the interface to be independent of local IPC
 mechanism and to allow distributed control of the simulator axes in case this
 is desired in the future.
 
-![EPOS4 with two connected CAN cables and STO connector](./res/epos_1.jpg){width=80%}
+![EPOS4 with two connected CAN cables and STO connector](./res/epos_1.jpg)
 
 ## Further reading (`./manuals/`)
 
@@ -89,7 +89,7 @@ node. Wiring errors usually manifest themselves in BUS-OFF errors and a
 NO-CARRIER state on the interface. Interface state can be queried using `ip
 -details link`.
 
-![EPOS4 with DIP switches 2 (node id = 2) and 7 (120 Ohms termination resistance) set](./res/epos_0.jpg){width=80%}
+![EPOS4 with DIP switches 2 (node id = 2) and 7 (120 Ohms termination resistance) set](./res/epos_0.jpg)
 
 Useful tools for debugging a CAN bus can be found in
 [linux-can/can-utils](https://github.com/linux-can/can-utils) and include

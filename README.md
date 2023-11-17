@@ -151,7 +151,7 @@ commands are as follows:
 | `halt`              | -         | _            | Halt movement for all axes                                 |
 | `position home`     | -         | -            | Seek home position for all three axes (NOT YET IMPLEMENTED)|
 | `position absolute` | axis (%s) | target (%lf) | Seek an absolute target position in degrees for given axis |
-| `position absolute` | axis (%s) | target (%lf) | Seek a relative target position in degrees for given axis  |
+| `position relative` | axis (%s) | target (%lf) | Seek a relative target position in degrees for given axis  |
 | `velocity`          | axis (%s) | target (%lf) | Set velocity for given axis                                |
 
 ## TODO

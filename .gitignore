@@ -1,1 +1,9 @@
+# Executable File
 ./client/epos_controller
+# Because the upper line doesn't work for me
+/client/epos_controller
+
+# IDE-Specific
+.idea
+.vscode
+

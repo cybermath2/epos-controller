@@ -1,6 +1,6 @@
 # Executable File
 ./client/epos_controller
-# Because the upper line doesn't work for me
+# Because the upper line doesn't seem to work in an IDE in a WSL-environment
 /client/epos_controller
 
 # IDE-Specific

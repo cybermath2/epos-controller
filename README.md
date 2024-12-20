@@ -24,8 +24,10 @@ The rest, written mainly in C# and Python.
 
 | location                                                                                                                             | description                                               |
 |--------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
-| [./Pi und Arduino/Arduino/](https://github.com/cybermath2/simulator-interface/tree/main/Pi%20und%20Arduino/Arduino)                  | CAN code for Arduinos                                     |
-| [./Pi und Arduino/Pi/ThreadTest.py](https://github.com/cybermath2/simulator-interface/blob/main/Pi%20und%20Arduino/Pi/ThreadTest.py) | important script interfacing with the CANaerospace bus    |
+| [./Gyro_SinCos_Wandler/](https://github.com/cybermath2/simulator-interface/tree/main/Gyro_SinCos_Wandler)                            | CAN code for Output to Arduinos (Speed, Climbrate, etc.) and Position and Brakes of the Physical Simulator |
+| [./Pi und Arduino/Arduino/](https://github.com/cybermath2/simulator-interface/tree/main/Pi%20und%20Arduino/Arduino)                  | CAN code for Arduinos (obsolete or outdated)              |
+| [./Pi und Arduino/Arduino/ArduinoOutCAN/ArduinoOutCAN.ino](https://github.com/cybermath2/simulator-interface/blob/main/Pi%20und%20Arduino/Arduino/ArduinoOutCAN/ArduinoOutCAN.ino)                  | CAN code for Input Arduinos (most recent yet outdated)|
+| [./Pi und Arduino/Pi/ThreadTest.py](https://github.com/cybermath2/simulator-interface/blob/main/Pi%20und%20Arduino/Pi/ThreadTest.py) | important script interfacing with the CANaerospace bus  (obsolete when using NativeCanStream in RasCanServer)  |
 | [./CommonLogic/](https://github.com/cybermath2/simulator-interface/tree/main/CommonLogic)                                            | (high-level) shared logic like can frames, can streams... |
 | [./RasCanServer/](https://github.com/cybermath2/simulator-interface/tree/main/RasCanServer)                                          | the central component connecting everything together      |
 | [./SimulatorInterface/](https://github.com/cybermath2/simulator-interface/tree/main/SimulatorInterface)                              | responsible for interfacing with simulators (MFS, P3D...) |

@@ -1,4 +1,5 @@
 #include "constants.h"
+#include "main.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,463 +10,88 @@
 #include <time.h>
 #include <unistd.h>
 #include <signal.h>
+#include <math.h>
+#include <pthread.h>
 
-#include <net/if.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#ifndef __USE_MISC
+#define __USE_MISC 1
+#include <net/if.h>
+#undef __USE_MISC
+#else
+#include <net/if.h>
+#endif
+
 #include <sys/ioctl.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 
 // SocketCAN
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
-static int8_t mode_last = 0xFF;
-static void *port = NULL;
 
-// utility ----------------------------------------------------------------------------------------
-void set(const struct cob_id *id, uint16_t node_id, void *p, size_t n);
-void get(void *buf, size_t n, uint16_t node_id, const struct cob_id *id);
-void die(uint32_t err, const char *what, ...);
+void brakes(bool);
+void positions();
 
-void print_velocity(uint16_t node_id);
-void print_position(uint16_t node_id);
-
-void driver_info_dump(void);
-void node_info_dump(uint16_t node_id);
-void str_motor_type(char *buf, size_t n, uint16_t motor_type);
-uint16_t axis_to_node_id(const char *axis);
-
-// communications ---------------------------------------------------------------------------------
-void port_open(void);                  // open a handle to the CAN port for communication
-void port_close(void);                 // close the handle
-void port_configure(void);             // set port parameters (baud rate, timeout)
-void node_reset(uint16_t node_id);     // clear fault state and enable node
-void node_configure(uint16_t node_id); // set node parameters (range of motion, acceleration...)
-
-void can_read_loop(const char *port_name); // read and process raw can frames from the port
-
-// command processing -----------------------------------------------------------------------------
-void comm_start(void);                 // connect to server
-void comm_loop_enter(int fd);
-void command_process(const char *cmd);
-
-void int_handler(int signo);
-void exit_gracefully(void);
-
-// motion -----------------------------------------------------------------------------------------
-void motion_halt(void);
-void motion_position(const char *axis, bool relative, double deg);
-void motion_velocity(const char *axis, double rpm);
-void move_to_initial_position(void);
-
-int main(int argc, char *argv[])
-{
-        driver_info_dump();
-        //can_read_loop(PORT_NAME_SOCK);
-
-	port_open();
-        port_configure();
-
-	uint8_t sto_state;
-	get(&sto_state, sizeof(sto_state), NODE_ID_YAW, &COB_ID_STO_STATES);
-	printf("0x%X\n", sto_state);
-
-        node_reset(NODE_ID_YAW);
-        //node_reset(NODE_ID_PITCH);
-        //node_reset(NODE_ID_ROLL);
-
-        node_configure(NODE_ID_YAW);
-        //node_configure(NODE_ID_PITCH);
-        //node_configure(NODE_ID_ROLL);
-
-        node_info_dump(NODE_ID_YAW);
-        //node_info_dump(NODE_ID_PITCH);
-        //node_info_dump(NODE_ID_ROLL);
-
-        uint32_t err;
-	int32_t position;
-	if (!VCS_GetPositionIs(port, NODE_ID_YAW, &position, &err)) {
-		die(err, "failed to get position is");
-	}
-	printf("current position: %d\n");
-
-        signal(SIGINT, int_handler);
-        comm_start();
-
-	exit_gracefully();
-        return 0;
-}
-
-// utility ------------------------------------------------------------------------------
-void set(const struct cob_id *id, uint16_t node_id, void *p, size_t n)
-{
-        uint32_t bytes_written;
-        uint32_t err;
-        if (!VCS_SetObject(port, node_id, id->id, id->sid, p, n, &bytes_written, &err)) {
-                die(err, "failed to set object %X-%X", id->id, id->sid);
-        }
-}
-
-
-void get(void *buf, size_t n, uint16_t node_id, const struct cob_id *id)
-{
-        uint32_t bytes_read;
-        uint32_t err;
-        if (!VCS_GetObject(port, node_id, id->id, id->sid, buf, n, &bytes_read, &err)) {
-                die(err, "failed to get object %X-%X", id->id, id->sid);
-        }
-}
-
-void die(uint32_t err, const char *what, ...)
-{
-        va_list args;
-        va_start(args, what);
-        fprintf(stderr, "\033[1;31m");
-        vfprintf(stderr, what, args);
-        fprintf(stderr, " (error code 0x%X)", err);
-        va_end(args);
-
-        if (err != 0) {
-                char err_info[MAX_STR_SIZE];
-                if (VCS_GetErrorInfo(err, err_info, MAX_STR_SIZE)) {
-                        fprintf(stderr, ": %s\n", err_info);
-                }
-        }
-
-        if (port == NULL) {
-            // only print node-specific errors if port is set
-            goto end;
-        }
-
-	fprintf(stderr, "node-specific errors follow:\n");
-
-	uint16_t ids[] = { NODE_ID_YAW, NODE_ID_PITCH, NODE_ID_ROLL };
-
-	for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); i++) {
-		uint16_t id = ids[i];
-		uint8_t num_err;
-		if (VCS_GetNbOfDeviceError(port, id, &num_err, &err)) {
-			fprintf(stderr, "node %u\n", id);
-
-			for (uint8_t i = 1; i <= num_err; i++) {
-				uint32_t device_err;
-				char err_info[MAX_STR_SIZE];
-				if (!VCS_GetDeviceErrorCode(port, id, num_err, &device_err, &err) ||
-				    !VCS_GetErrorInfo(device_err, err_info, MAX_STR_SIZE)) {
-					continue;
-				}
-
-				fprintf(stderr, "|-> (error code 0x%X): %s\n", device_err, err_info);
-			}
-		}
-	}
-
-end:
-        fprintf(stderr, "\033[1;0m\n");
-        exit(1);
-}
-
-void print_velocity(uint16_t node_id)
-{
-        int32_t velocity;
-        uint32_t err;
-        if (!VCS_GetVelocityIs(port, node_id, &velocity, &err)) {
-                die(err, "failed to get velocity is");
-        }
-
-        printf("current velocity: %d\n", velocity);
-}
-
-void print_position(uint16_t node_id)
-{
-        int32_t position;
-        uint32_t err;
-        if (!VCS_GetPositionIs(port, node_id, &position, &err)) {
-                die(err, "failed to get position is");
-        }
-
-        printf("current position: %d\n", position);
-}
-
-void driver_info_dump(void)
-{
-        printf("getting driver information...\n");
-
-        char lib_name[MAX_STR_SIZE];
-        char lib_version[MAX_STR_SIZE];
-
-        uint32_t err;
-        if (!VCS_GetDriverInfo(lib_name, MAX_STR_SIZE,
-                                lib_version, MAX_STR_SIZE, &err)) {
-                die(err, "failed to get driver information");
-        }
-
-        printf("driver name='%s' (version '%s')\n", lib_name, lib_version);
-
-        // available device, protocol and interface names
-        char name[MAX_STR_SIZE];
-        int eos = false;
-        if (!VCS_GetDeviceNameSelection(true, name, MAX_STR_SIZE, &eos, &err)) {
-                die(err, "failed to get available device names");
-        }
-
-        printf("possible device names: '%s', ", name);
-
-        while (!eos) {
-                if (!VCS_GetDeviceNameSelection(false, name, MAX_STR_SIZE, &eos, &err)) {
-                        die(err, "failed to get available device names");
-                }
-                printf("'%s', ", name);
-        }
-
-        printf("\n");
-
-        if (!VCS_GetProtocolStackNameSelection(DEV_NAME, true, name, MAX_STR_SIZE, &eos, &err)) {
-                die(err, "failed to get available protocol stack names ");
-        }
-
-        printf("possible protocol stack names: '%s', ", name);
-
-        while (!eos) {
-                if (!VCS_GetProtocolStackNameSelection(DEV_NAME, false, name, MAX_STR_SIZE, &eos, &err)) {
-                        die(err, "failed to get available protocol stack names");
-                }
-                printf("'%s', ", name);
-        }
-
-        printf("\n");
-
-        if (!VCS_GetInterfaceNameSelection(DEV_NAME, PROTO_NAME, true, name, MAX_STR_SIZE, &eos, &err)) {
-                die(err, "failed to get available interface names");
-        }
-
-        printf("possible interface names: '%s', ", name);
-
-        while (!eos) {
-                if (!VCS_GetInterfaceNameSelection(DEV_NAME, PROTO_NAME, false, name, MAX_STR_SIZE, &eos, &err)) {
-                        die(err, "failed to get available interface names");
-                }
-                printf("'%s', ", name);
-        }
-
-        printf("\n");
-}
-
-void node_info_dump(uint16_t node_id)
-{
-        printf("getting node information for node %u...\n", node_id);
-
-	if (node_id == 0xFFFF) {
-		printf("invalid node id: %u\n", node_id);
-		return;
-	}
-
-        // motor parameters
-        uint16_t motor_type;
-        uint32_t err;
-        if (!VCS_GetMotorType(port, node_id, &motor_type, &err)) {
-                die(err, "failed to get motor type");
-        }
-
-        printf("motor type=%d\n", motor_type);
-        uint32_t nominal_current;
-        uint32_t output_current_limit;
-        uint16_t thermal_time_constant;
-
-        if (!VCS_GetDcMotorParameterEx(port, node_id, &nominal_current,
-                                &output_current_limit, &thermal_time_constant, &err)) {
-                die(err, "failed to get motor parameters");
-        }
-
-        printf("nominal current=%d, output current limit=%d, thermal time constant winding=%d\n",
-                        nominal_current, output_current_limit, thermal_time_constant);
-
-        if (motor_type == MT_EC_BLOCK_COMMUTATED_MOTOR || motor_type == MT_EC_SINUS_COMMUTATED_MOTOR) {
-                uint8_t number_of_pole_pairs;
-                get(&number_of_pole_pairs, sizeof(number_of_pole_pairs), node_id, &COB_ID_NUMBER_OF_POLE_PAIRS);
-                printf("number of pole pairs=%d\n", number_of_pole_pairs);
-        }
-
-        uint32_t torque_constant;
-        uint32_t max_motor_speed;
-        uint32_t max_gear_input_speed;
-        get(&torque_constant, sizeof(torque_constant), node_id, &COB_ID_TORQUE_CONSTANT);
-        get(&max_motor_speed, sizeof(max_motor_speed), node_id, &COB_ID_MAX_MOTOR_SPEED);
-        get(&max_gear_input_speed, sizeof(max_gear_input_speed), node_id, &COB_ID_MAX_GEAR_INPUT_SPEED);
-
-        printf("torque constant=%d, max motor speed=%d, max gear input speed=%d\n",
-                        torque_constant, max_motor_speed, max_gear_input_speed);
-}
-
-void str_motor_type(char *buf, size_t n, uint16_t motor_type)
-{
-        const char *str = "";
-
-        switch (motor_type) {
-                case MT_DC_MOTOR:
-                        str = "brushed DC motor"; break;
-                case MT_EC_SINUS_COMMUTATED_MOTOR:
-                        str = "EC motor sinus commutated"; break;
-                case MT_EC_BLOCK_COMMUTATED_MOTOR:
-                        str = "EC motor block commutated"; break;
-                default:
+void cq(){
+        while (true)
+        {
+                char input[128];
+                scanf("%s", input);
+                uint16_t axis;
+                switch (input[0])
+                {
+                case 'y':
+                        axis = NODE_ID_YAW;
                         break;
-        }
-
-        strncpy(buf, str, n);
-}
-
-uint16_t axis_to_node_id(const char *axis)
-{
-        int node_id = -1;
-        if (strcmp(axis, "yaw") == 0) {
-                node_id = NODE_ID_YAW;
-        } else if (strcmp(axis, "pitch") == 0) {
-                node_id = NODE_ID_PITCH;
-        } else if (strcmp(axis, "roll") == 0) {
-                node_id = NODE_ID_ROLL;
-        }
-
-        return node_id;
-}
-
-void port_open(void)
-{
-        printf("opening device '%s' using protocol '%s' on interface '%s' and"
-                        " port '%s'...\n", DEV_NAME, PROTO_NAME, IF_NAME, PORT_NAME);
-
-        uint32_t err;
-        port = VCS_OpenDevice(DEV_NAME, PROTO_NAME, IF_NAME, PORT_NAME, &err);
-        if (!port) {
-                die(err, "failed to open port");
-        }
-
-        printf("port opened: handle=0x%X\n", port);
-}
-
-void port_close(void)
-{
-        printf("closing port 0x%p...\n", port);
-
-        uint32_t err;
-        if (!VCS_CloseDevice(port, &err)) {
-                die(err, "failed to close port");
-        }
-}
-
-void port_configure(void)
-{
-        printf("setting baudrate to %dkbits/s and timeout to %ums...\n",
-                        BAUDRATE / 1000, TIMEOUT);
-
-        uint32_t err;
-        if (!VCS_SetProtocolStackSettings(port, BAUDRATE, TIMEOUT, &err)) {
-                die(err, "failed to set port settings");
-        }
-}
-
-void node_reset(uint16_t node_id)
-{
-        printf("resetting node %u...\n", node_id);
-
-	if (node_id == 0xFFFF) {
-		printf("invalid node id: %u\n", node_id);
-		return;
-	}
-
-        uint32_t err;
-        int32_t is_fault;
-        if (!VCS_GetFaultState(port, node_id, &is_fault, &err)) {
-                die(err, "failed to get fault state");
-        }
-
-        if (is_fault) {
-                // clear fault
-                printf("fault state detected - clearing...\n");
-                if (!VCS_ClearFault(port, node_id, &err)) {
-                        die(err, "failed to get fault state");
-                }
-        }
-
-	sleep(1);
-
-        int32_t is_enabled;
-        if (!VCS_GetEnableState(port, node_id, &is_enabled, &err)) {
-                die(err, "failed to get enable state");
-        }
-
-        if (!is_enabled) {
-                // enable device
-                printf("device not enabled - enabling now...\n");
-                if (!VCS_SetEnableState(port, node_id, &err)) {
-                        die(err, "failed to set enable state");
+                case 'r':
+                        axis = NODE_ID_ROLL;
+                        break;
+                case 'p':
+                        axis = NODE_ID_PITCH;
+                        break;
+                case 'b':
+                        brakes(true);
+                        continue;
+                case 'm':
+                        brakes(false);
+                        continue;
+                case 'c':
+                        positions();
+                        continue;
+                default:
+                        continue;
                 }
 
+                if (input[1] == 'v'){
+                        double rpm = atof(&input[2]);
+                        if (fabs(rpm) > 5)
+                                rpm = 5.0;
+                        motion_velocity(axis, rpm);
+                } else if (input[1] == 'p'){
+                        bool absolute = false;
+                        if (input[2] == 'a'){
+                                absolute = true;
+                        } else if (input[2] == 'r'){
+                                absolute = false;
+                        } else {
+                                continue;
+                        }
+                        
+                        double angle = atof(&input[3]);
+                        motion_position(axis, absolute, angle);
+                } else {
+                        continue;
+                }
         }
-
-	printf("enabled device\n");
+        
 }
 
-void node_configure(uint16_t node_id)
-{
-        printf("configuring node %u...\n", node_id);
+int can_fd;
 
-	if (node_id == 0xFFFF) {
-		printf("invalid node id: %u\n", node_id);
-		return;
-	}
-
-	// don't need to do this
-	/*
-        printf("configuring motor parameters...\n");
-
-        uint32_t err;
-        uint32_t bytes_written;
-        if (!VCS_SetMotorType(port, node_id, MOTOR_TYPE, &err) ||
-                        !VCS_SetDcMotorParameterEx(port, node_id, NOMINAL_CURRENT,
-                                OUTPUT_CURRENT_LIMIT, THERMAL_TIME_CONSTANT, &err)) {
-                die(err, "failed to configure motor");
-        }
-
-        set(&COB_ID_TORQUE_CONSTANT, node_id, &TORQUE_CONSTANT, sizeof(TORQUE_CONSTANT));
-        set(&COB_ID_MAX_MOTOR_SPEED, node_id, &MAX_MOTOR_SPEED, sizeof(MAX_MOTOR_SPEED));
-        set(&COB_ID_MAX_GEAR_INPUT_SPEED, node_id, &MAX_GEAR_INPUT_SPEED, sizeof(MAX_GEAR_INPUT_SPEED));
-
-        printf("configured motor with MOTOR_TYPE=%d, NOMINAL_CURRENT=%d, "
-                        "OUTPUT_CURRENT_LIMIT=%d, THERMAL_TIME_CONSTANT_WINDING=%d, "
-                        "NUMBER_OF_POLE_PAIRS=%d, MAX_MOTOR_SPEED=%d, "
-                        "MAX_GEAR_INPUT_SPEED=%d\n", MOTOR_TYPE, NOMINAL_CURRENT,
-                        OUTPUT_CURRENT_LIMIT, THERMAL_TIME_CONSTANT,
-                        NUMBER_OF_POLE_PAIRS, MAX_MOTOR_SPEED, MAX_GEAR_INPUT_SPEED);
-
-        if (MOTOR_TYPE == MT_EC_BLOCK_COMMUTATED_MOTOR || MOTOR_TYPE == MT_EC_SINUS_COMMUTATED_MOTOR) {
-                // brushless DC (EC) motor for which the number of pole pairs
-                // needs to be configured as well
-                printf("using brushless DC motor - setting "
-                                "NUMBER_OF_POLE_PAIRS=%d...\n", NUMBER_OF_POLE_PAIRS);
-                set(&COB_ID_NUMBER_OF_POLE_PAIRS, node_id,
-                                &NUMBER_OF_POLE_PAIRS, sizeof(NUMBER_OF_POLE_PAIRS));
-
-        }
-	*/
-
-        // TODO software position limits
-	printf("setting motion range of [%d, %d]...\n", POS_DEG_MIN, POS_DEG_MAX);
-        set(&COB_ID_MIN_POS, node_id, (void*)&POS_DEG_MIN, sizeof(POS_DEG_MIN));
-        set(&COB_ID_MAX_POS, node_id, (void*)&POS_DEG_MAX, sizeof(POS_DEG_MAX));
-}
-
-
-void can_read_loop(const char *port_name)
-{
-        // https://github.com/craigpeacock/CAN-Examples/blob/master/canreceive.c
-
-	// this will come in handy once additional data not available through
-	// the EPOS library will need to be read
-
+void setup_can(const char *port_name) {
         int sock;
         if ((sock = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
                 die(0, "failed to create CAN socket");
@@ -483,22 +109,102 @@ void can_read_loop(const char *port_name)
         if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
                 die(0, "failed to bind CAN socket");
         }
+        can_fd = sock;
+}
 
-        while (true) {
-                struct can_frame frame;
-                int nread = read(sock, &frame, sizeof(frame));
-                if (nread < 0) {
-                        die(0, "failed to read from CAN socket");
+struct position pos = {};
+
+void positions() {
+        printf("the current yaw is %f\n", pos.yaw);
+        printf("the current pitch is %f\n", pos.pitch);
+        printf("the current roll is %f\n", pos.roll);
+}
+
+void *position_loop(void *args){
+        struct can_frame frame;
+        float val;
+        uint8_t *valptr;
+        while (1)
+        {
+                read(can_fd, &frame, sizeof(frame));
+                valptr = (uint8_t *) &val;
+                valptr[0] = frame.data[3];
+                valptr[1] = frame.data[2];
+                valptr[2] = frame.data[1];
+                valptr[3] = frame.data[0];
+                switch (frame.can_id)
+                {
+                case 0x579:
+                        pos.yaw = val;
+                        break;
+                case 0x580:
+                        pos.pitch = val;
+                        break;
+                case 0x581:
+                        pos.roll = val;
+                        break;
+                default:
+                        break;
                 }
-
-                printf("0x%03X [%d] ", frame.can_id, frame.can_dlc);
-                for (size_t i = 0; i < frame.can_dlc; i++) {
-                        printf("%02X ", frame.data[i]);
-                }
-
-                printf("\n");
         }
+};
 
+int main(int argc, char *argv[])
+{
+        driver_info_dump();
+
+        //can_read_loop("can0");
+
+	port_open();
+        port_configure();
+        setup_can("can0");
+        positions();
+        pthread_t position_thread;
+        pthread_create(&position_thread, NULL, position_loop, NULL);
+
+	//uint8_t sto_state;
+	//get(&sto_state, sizeof(sto_state), NODE_ID_YAW, &COB_ID_STO_STATES);
+	//printf("0x%X\n", sto_state);
+
+        node_reset(NODE_ID_YAW);
+        node_reset(NODE_ID_PITCH);
+        node_reset(NODE_ID_ROLL);
+
+        node_configure(NODE_ID_YAW);
+        node_configure(NODE_ID_PITCH);
+        node_configure(NODE_ID_ROLL);
+
+        node_info_dump(NODE_ID_YAW);
+        node_info_dump(NODE_ID_PITCH);
+        node_info_dump(NODE_ID_ROLL);
+
+        uint32_t err;
+	int32_t position;
+	if (!VCS_GetPositionIs(port, NODE_ID_ROLL, &position, &err)) {
+		die(err, "failed to get position is");
+	}
+	printf("current position: %d\n", position);
+
+        signal(SIGINT, int_handler);
+        sleep(10);
+        move_to_initial_position();
+        cq();
+        //comm_start();
+	exit_gracefully();
+        return 0;
+}
+
+// utility ------------------------------------------------------------------------------
+
+void brakes(bool on){
+        struct can_frame frame = {
+                .can_id = 0x604,
+                .can_dlc = 8,
+                .data = {}
+        };
+        frame.data[4] = !on;
+        
+        write(can_fd, &frame, sizeof(frame));
 }
 
 void comm_start(void)
@@ -564,15 +270,15 @@ void command_process(const char *cmd)
         } else if (sscanf(cmd, "position absolute %s %lf", s, &d) == 2) {
                 // absolute position
                 printf("%s axis: moving to absolute position %lf deg\n", s, d);
-                motion_position(s, true, d);
+                motion_position(axis_to_node_id(s), true, d);
         } else if (sscanf(cmd, "position relative %s %lf", s, &d) == 2) {
                 // relative position
                 printf("%s axis: moving to relative position %lf deg\n", s, d);
-                motion_position(s, false, d);
+                motion_position(axis_to_node_id(s), false, d);
         } else if (sscanf(cmd, "velocity %s %lf", s, &d) == 2) {
                 // velocity
                 printf("%s axis: moving with velocity %lf rpm\n", s, d);
-                motion_velocity(s, d);
+                motion_velocity(axis_to_node_id(s), d);
         } else if (strcmp(cmd, "halt") == 0) {
 		// halt
 		printf("halting movement for all axes\n");
@@ -595,8 +301,9 @@ void exit_gracefully(void)
 
         uint32_t err;
         if (!VCS_SetDisableState(port, NODE_ID_YAW, &err)
-         || !VCS_SetDisableState(port, NODE_ID_PITCH, &err)
-         || !VCS_SetDisableState(port, NODE_ID_ROLL, &err)) {
+         | !VCS_SetDisableState(port, NODE_ID_PITCH, &err)
+         | !VCS_SetDisableState(port, NODE_ID_ROLL, &err)) {
+                port_close();
         	die(err, "failed to set disable state");
         }
 
@@ -605,91 +312,9 @@ void exit_gracefully(void)
 	port_close();
 	printf("port closed\n");
 
+        brakes(true);
+        close(can_fd);
 	exit(1);
 }
 
 // motion -------------------------------------------------------------------------------
-void motion_halt(void)
-{
-	uint32_t err;
-	switch (mode_last) {
-		case OMD_PROFILE_POSITION_MODE:
-			if (!VCS_HaltPositionMovement(port, NODE_ID_YAW, &err) ||
-			    !VCS_HaltPositionMovement(port, NODE_ID_PITCH, &err) ||
-			    !VCS_HaltPositionMovement(port, NODE_ID_ROLL, &err)) {
-				die(err, "failed to halt profile position movement for one or more axes");
-			}
-			break;
-
-		case OMD_PROFILE_VELOCITY_MODE:
-			if (!VCS_HaltVelocityMovement(port, NODE_ID_YAW, &err) ||
-			    !VCS_HaltVelocityMovement(port, NODE_ID_PITCH, &err) ||
-			    !VCS_HaltVelocityMovement(port, NODE_ID_ROLL, &err)) {
-				die(err, "failed to halt profile velocity movement for one or more axes");
-			}
-			break;
-	}
-}
-
-void motion_position(const char *axis, bool absolute, double deg)
-{
-	// TODO better safety (also use VCS_SetMaxAcceleration()...)
-
-	// TODO move this up into caller
-        uint16_t node_id = axis_to_node_id(axis);
-        if (node_id == 0xFFFF) {
-                printf("invalid node id: '%s'\n", axis);
-                return;
-        }
-
-	printf("moving to new position %lf\n", deg);
-
-        uint32_t err;
-	mode_last = OMD_PROFILE_POSITION_MODE;
-
-        // TODO only activate if necessary so we don't have to do this every time
-	if (!VCS_ActivateProfilePositionMode(port, node_id, &err)) {
-		die(err, "failed to activate profile position mode");
-	}
-
-        // TODO move into node_configure() so we don't have to do this every time
-        if (!VCS_SetPositionProfile(port, node_id, PPM_MAX_VELOCITY, 1000, 1000, &err)) {
-                die(err, "failed to set position profile");
-        }
-
-        if (!VCS_MoveToPosition(port, node_id, deg * DEGTOINC, absolute, true, &err)) {
-                die(err, "failed to move to position");
-        }
-}
-
-void motion_velocity(const char *axis, double rpm)
-{
-        uint16_t node_id = axis_to_node_id(axis);
-        if (node_id == 0xFFFF) {
-                printf("invalid node id: '%s'\n", axis);
-                return;
-        }
-
-        uint32_t err;
-	mode_last = OMD_PROFILE_VELOCITY_MODE;
-
-        // TODO only activate if necessary so we don't have to do this every time
-	if (!VCS_ActivateProfileVelocityMode(port, node_id, &err)) {
-		die(err, "failed to activate profile velocity mode");
-	}
-
-        // TODO move into node_configure() so we don't have to do this every time
-        if (!VCS_SetVelocityProfile(port, node_id, 1000, 1000, &err)) {
-                die(err, "failed to set velocity profile");
-        }
-
-        if (!VCS_MoveWithVelocity(port, node_id, rpm * RPMTOVEL, &err)) {
-                die(err, "failed to move with velocity");
-        }
-
-        // sleep(5); uncomment to move for five seconds
-
-        if (!VCS_HaltVelocityMovement(port, node_id, &err)) {
-                die(err, "failed to halt velocity movement");
-        }
-}

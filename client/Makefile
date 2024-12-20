@@ -1,5 +1,5 @@
 CC		= clang
-FLAGS		=  -Wall -ggdb -I./deps -L/usr/local/lib -lEposCmd -lftd2xx
+FLAGS		=  -Wall -ggdb -I./deps -L/usr/local/lib -lEposCmd -lftd2xx -lpthread
 SOURCE_FILES	= $(shell find . -type f -name '*.c')
 HEADER_FILES	= $(shell find . -type f -name '*.h') # include these as well to force rebuild
 

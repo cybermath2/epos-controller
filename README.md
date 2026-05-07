@@ -5,18 +5,18 @@
 Lots of different programming languages are being used in this project. The main
 program code is currently split into two repositories:
 
-## epos-controller ([baseng0815/epos-controller](https://github.com/Baseng0815/epos-controller/))
+## epos-controller ([cybermath2/epos-controller](https://github.com/cybermath2/epos-controller/))
 
 EPOS4 code for motion control, written in C.
 
 | location                                                                                       | description                              |
 |------------------------------------------------------------------------------------------------|------------------------------------------|
-| [./lib/](https://github.com/Baseng0815/epos-controller/tree/master/lib)                        | maxon libraries and sample code          |
-| [./client/](https://github.com/Baseng0815/epos-controller/tree/master/client)                  | source code and Makefile                 |
-| [./manuals/](https://github.com/Baseng0815/epos-controller/tree/master/manuals)                | maxon manuals                            |
-| [./scripts/](https://github.com/Baseng0815/epos-controller/tree/master/scripts)                | utility scripts                          |
-| [./Epos4-Node2.dcf](https://github.com/Baseng0815/epos-controller/tree/master/Epos4-Node2.dcf) |                                          |
-| [./res/](https://github.com/Baseng0815/epos-controller/tree/master/res)                        | resources used to generate this document |
+| [./lib/](https://github.com/cybermath2/epos-controller/tree/master/lib)                        | maxon libraries and sample code          |
+| [./client/](https://github.com/cybermath2/epos-controller/tree/master/client)                  | source code and Makefile                 |
+| [./manuals/](https://github.com/cybermath2/epos-controller/tree/master/manuals)                | maxon manuals                            |
+| [./scripts/](https://github.com/cybermath2/epos-controller/tree/master/scripts)                | utility scripts                          |
+| [./Epos4-Node2.dcf](https://github.com/cybermath2/epos-controller/tree/master/Epos4-Node2.dcf) |                                          |
+| [./res/](https://github.com/cybermath2/epos-controller/tree/master/res)                        | resources used to generate this document |
 
 ## simulator-interface ([cybermath2/simulator-interface/](https://github.com/cybermath2/simulator-interface/))
 
